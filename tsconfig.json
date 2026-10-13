@@ -14,7 +14,10 @@
     "noEmit": true,
     "skipLibCheck": true,
     "moduleDetection": "force",
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    // Node runs server/ as TypeScript by stripping types, which only works for
+    // syntax that erases: no enums, namespaces or parameter properties.
+    "erasableSyntaxOnly": true
   },
-  "include": ["*.ts", "spec", "scripts"]
+  "include": ["*.ts", "spec", "scripts", "server", "shared", "client"]
 }

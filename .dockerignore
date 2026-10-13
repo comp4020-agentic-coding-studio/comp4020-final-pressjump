@@ -11,3 +11,5 @@ dist
 mise.local.toml
 *.pem
 .claude
+public/build
+data
