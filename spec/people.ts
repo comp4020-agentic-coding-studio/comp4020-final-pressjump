@@ -1,11 +1,11 @@
 // A person in a browser, as far as the server can tell: a WebSocket on a
-// sheet, a token, and the messages that arrive. The spec uses these to act out
-// two or three people at once against the running app.
+// design, a token, and the messages that arrive. The spec uses these to act
+// out two or three people at once against the running app.
 
 import { randomBytes } from "node:crypto";
 import { inject } from "vitest";
-import type { Geometry, Shape } from "../shared/geometry.ts";
-import type { ClientMessage, Person, ServerMessage, Sheet } from "../shared/protocol.ts";
+import type { Body, Feature, Stored } from "../shared/model.ts";
+import type { ClientMessage, Design, Person, ServerMessage } from "../shared/protocol.ts";
 
 export const baseUrl = inject("baseUrl");
 
@@ -30,24 +30,30 @@ export function id(): string {
   return randomBytes(9).toString("base64url").replace(/[-_]/g, "x");
 }
 
-export async function newSheet(name = "spec", w = 300, h = 200): Promise<Sheet> {
-  const res = await fetch(new URL("/api/sheets", baseUrl), {
+export const box = (over: Partial<Body> = {}): Body =>
+  ({ kind: "box", name: "Box", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#b9bec4", w: 10, h: 20, d: 30, fillet: 0, ...over }) as Body;
+
+export const cylinder = (over: Partial<Body> = {}): Body =>
+  ({ kind: "cylinder", name: "Cylinder", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#8a9097", r: 5, h: 10, ...over }) as Body;
+
+export async function newDesign(name = "spec"): Promise<Design> {
+  const res = await fetch(new URL("/api/designs", baseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, w, h }),
+    body: JSON.stringify({ name }),
   });
-  if (res.status !== 201) throw new Error(`could not make a sheet: ${res.status}`);
-  return (await res.json()) as Sheet;
+  if (res.status !== 201) throw new Error(`could not make a design: ${res.status}`);
+  return (await res.json()) as Design;
 }
 
-// What the server reads back from disk for a sheet.
-export async function stored(sheet: string): Promise<Shape[]> {
-  const res = await fetch(new URL(`/api/sheets/${sheet}`, baseUrl));
-  return ((await res.json()) as { shapes: Shape[] }).shapes;
+// What the server reads back from disk for a design.
+export async function stored(design: string): Promise<Stored[]> {
+  const res = await fetch(new URL(`/api/designs/${design}`, baseUrl));
+  return ((await res.json()) as { features: Stored[] }).features;
 }
 
-export async function visit(sheet: string, as = token(), name = "Spec"): Promise<Visitor> {
-  const url = new URL(`/ws?sheet=${sheet}`, baseUrl);
+export async function visit(design: string, as = token(), name = "Spec"): Promise<Visitor> {
+  const url = new URL(`/ws?design=${design}`, baseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(url);
   const inbox: ServerMessage[] = [];
@@ -99,10 +105,32 @@ export async function visit(sheet: string, as = token(), name = "Spec"): Promise
   };
 }
 
-// Adds a shape and waits for the server to confirm it.
-export async function add(v: Visitor, g: Geometry): Promise<Shape> {
-  const shapeId = id();
-  v.send({ t: "add", id: shapeId, g });
-  const put = await v.next("put", (m) => m.shape.id === shapeId);
-  return put.shape;
+// Adds a feature and waits for the server to confirm it.
+export async function add(v: Visitor, f: Feature): Promise<Stored> {
+  const featureId = id();
+  v.send({ t: "add", id: featureId, f });
+  const put = await v.next("put", (m) => m.feature.id === featureId);
+  return put.feature;
+}
+
+// A binary STL, read back: its triangles' volume and how far it reaches.
+export function readStl(buf: ArrayBuffer): { triangles: number; volume: number; min: number[]; max: number[] } {
+  const view = new DataView(buf);
+  const triangles = view.getUint32(80, true);
+  let volume = 0;
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (let t = 0; t < triangles; t++) {
+    const o = 84 + t * 50 + 12;
+    const v = Array.from({ length: 9 }, (_, i) => view.getFloat32(o + i * 4, true));
+    for (let p = 0; p < 9; p += 3) {
+      for (let k = 0; k < 3; k++) {
+        min[k] = Math.min(min[k], v[p + k]);
+        max[k] = Math.max(max[k], v[p + k]);
+      }
+    }
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = v;
+    volume += (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
+  }
+  return { triangles, volume, min, max };
 }

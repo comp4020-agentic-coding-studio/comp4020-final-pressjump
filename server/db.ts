@@ -5,32 +5,30 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Geometry, Shape } from "../shared/geometry.ts";
-import type { Person, Sheet } from "../shared/protocol.ts";
+import type { Feature, Stored } from "../shared/model.ts";
+import type { Design } from "../shared/protocol.ts";
 
 const dir = process.env.DATA_DIR ?? "./data";
 mkdirSync(dir, { recursive: true });
 
-const db = new DatabaseSync(join(dir, "bench.db"));
+const db = new DatabaseSync(join(dir, "bench3d.db"));
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA synchronous = FULL;
-  CREATE TABLE IF NOT EXISTS sheets (
+  CREATE TABLE IF NOT EXISTS designs (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    w REAL NOT NULL,
-    h REAL NOT NULL,
     created INTEGER NOT NULL,
     updated INTEGER NOT NULL
   );
-  CREATE TABLE IF NOT EXISTS shapes (
-    sheet TEXT NOT NULL,
+  CREATE TABLE IF NOT EXISTS features (
+    design TEXT NOT NULL,
     id TEXT NOT NULL,
     seq INTEGER NOT NULL,
     v INTEGER NOT NULL,
     by TEXT NOT NULL,
-    geom TEXT NOT NULL,
-    PRIMARY KEY (sheet, id)
+    body TEXT NOT NULL,
+    PRIMARY KEY (design, id)
   );
   CREATE TABLE IF NOT EXISTS people (
     id TEXT PRIMARY KEY,
@@ -38,64 +36,60 @@ db.exec(`
   );
 `);
 
-type SheetRow = { id: string; name: string; w: number; h: number; updated: number; shapes: number };
+type DesignRow = { id: string; name: string; updated: number; features: number };
 
 const q = {
-  sheets: db.prepare(
-    `SELECT s.id, s.name, s.w, s.h, s.updated, (SELECT COUNT(*) FROM shapes WHERE sheet = s.id) AS shapes
-     FROM sheets s ORDER BY s.updated DESC LIMIT 200`,
+  designs: db.prepare(
+    `SELECT d.id, d.name, d.updated, (SELECT COUNT(*) FROM features WHERE design = d.id) AS features
+     FROM designs d ORDER BY d.updated DESC LIMIT 200`,
   ),
-  sheet: db.prepare(`SELECT id, name, w, h FROM sheets WHERE id = ?`),
-  addSheet: db.prepare(`INSERT INTO sheets (id, name, w, h, created, updated) VALUES (?, ?, ?, ?, ?, ?)`),
-  renameSheet: db.prepare(`UPDATE sheets SET name = ?, updated = ? WHERE id = ?`),
-  touchSheet: db.prepare(`UPDATE sheets SET updated = ? WHERE id = ?`),
-  shapes: db.prepare(`SELECT id, v, by, geom FROM shapes WHERE sheet = ? ORDER BY seq`),
-  maxSeq: db.prepare(`SELECT COALESCE(MAX(seq), 0) AS seq FROM shapes WHERE sheet = ?`),
-  putShape: db.prepare(
-    `INSERT INTO shapes (sheet, id, seq, v, by, geom) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (sheet, id) DO UPDATE SET v = excluded.v, by = excluded.by, geom = excluded.geom`,
+  design: db.prepare(`SELECT id, name FROM designs WHERE id = ?`),
+  addDesign: db.prepare(`INSERT INTO designs (id, name, created, updated) VALUES (?, ?, ?, ?)`),
+  renameDesign: db.prepare(`UPDATE designs SET name = ?, updated = ? WHERE id = ?`),
+  touch: db.prepare(`UPDATE designs SET updated = ? WHERE id = ?`),
+  features: db.prepare(`SELECT id, seq, v, by, body FROM features WHERE design = ? ORDER BY seq`),
+  put: db.prepare(
+    `INSERT INTO features (design, id, seq, v, by, body) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (design, id) DO UPDATE SET v = excluded.v, by = excluded.by, body = excluded.body`,
   ),
-  delShape: db.prepare(`DELETE FROM shapes WHERE sheet = ? AND id = ?`),
+  del: db.prepare(`DELETE FROM features WHERE design = ? AND id = ?`),
   person: db.prepare(`SELECT id, name FROM people WHERE id = ?`),
-  putPerson: db.prepare(
-    `INSERT INTO people (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name`,
-  ),
+  putPerson: db.prepare(`INSERT INTO people (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name`),
 };
 
-export function listSheets(): SheetRow[] {
-  return q.sheets.all() as SheetRow[];
+export function listDesigns(): DesignRow[] {
+  return q.designs.all() as DesignRow[];
 }
 
-export function getSheet(id: string): Sheet | undefined {
-  return q.sheet.get(id) as Sheet | undefined;
+export function getDesign(id: string): Design | undefined {
+  return q.design.get(id) as Design | undefined;
 }
 
-export function addSheet(sheet: Sheet): void {
+export function addDesign(design: Design): void {
   const now = Date.now();
-  q.addSheet.run(sheet.id, sheet.name, sheet.w, sheet.h, now, now);
+  q.addDesign.run(design.id, design.name, now, now);
 }
 
-export function renameSheet(id: string, name: string): void {
-  q.renameSheet.run(name, Date.now(), id);
+export function renameDesign(id: string, name: string): void {
+  q.renameDesign.run(name, Date.now(), id);
 }
 
-export function loadShapes(sheet: string): Shape[] {
-  const rows = q.shapes.all(sheet) as { id: string; v: number; by: string; geom: string }[];
-  return rows.map((r) => ({ ...(JSON.parse(r.geom) as Geometry), id: r.id, v: r.v, by: r.by }));
+export function loadFeatures(design: string): Stored[] {
+  const rows = q.features.all(design) as { id: string; seq: number; v: number; by: string; body: string }[];
+  return rows.map((r) => ({ ...(JSON.parse(r.body) as Feature), id: r.id, v: r.v, by: r.by, seq: r.seq }));
 }
 
-// seq orders shapes bottom to top; it is set when a shape is first written and
-// an update keeps it, so editing a shape does not lift it above the others.
-export function putShape(sheet: string, shape: Shape): void {
-  const { id, v, by, ...geom } = shape;
-  const seq = (q.maxSeq.get(sheet) as { seq: number }).seq + 1;
-  q.putShape.run(sheet, id, seq, v, by, JSON.stringify(geom));
-  q.touchSheet.run(Date.now(), sheet);
+// seq is the feature's place in the timeline: set when it is first written,
+// kept by every update.
+export function putFeature(design: string, f: Stored): void {
+  const { id, v, by, seq, ...body } = f;
+  q.put.run(design, id, seq, v, by, JSON.stringify(body));
+  q.touch.run(Date.now(), design);
 }
 
-export function deleteShape(sheet: string, id: string): void {
-  q.delShape.run(sheet, id);
-  q.touchSheet.run(Date.now(), sheet);
+export function deleteFeature(design: string, id: string): void {
+  q.del.run(design, id);
+  q.touch.run(Date.now(), design);
 }
 
 export function getPerson(id: string): { id: string; name: string } | undefined {

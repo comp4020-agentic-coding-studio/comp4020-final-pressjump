@@ -1,69 +1,74 @@
-// What travels over the WebSocket at /ws?sheet=<id>. JSON, one object per
+// What travels over the WebSocket at /ws?design=<id>. JSON, one object per
 // message, `t` says which. The first message a client sends must be `hello`.
 
-import type { Geometry, Shape } from "./geometry.ts";
+import type { Feature, Stored, Vec3 } from "./model.ts";
 
 export type Person = { id: string; name: string; colour: string };
-export type Sheet = { id: string; name: string; w: number; h: number };
+export type Design = { id: string; name: string };
 
-// What someone is drawing or dragging and has not let go of yet. Never stored.
-export type Draft = Geometry[];
+// Where someone is looking from and at, so others can follow their view.
+export type Camera = { p: Vec3; t: Vec3 };
+
+// Bodies someone is dragging and has not let go of yet. Never stored.
+export type Draft = Feature[];
 
 export type ClientMessage =
   | { t: "hello"; token: string; name: string }
-  | { t: "add"; id: string; g: Geometry }
-  | { t: "update"; id: string; base: number; g: Geometry }
+  | { t: "add"; id: string; f: Feature }
+  | { t: "update"; id: string; base: number; f: Feature }
   | { t: "delete"; id: string; base: number }
   | { t: "hold"; ids: string[] }
-  | { t: "cursor"; x: number; y: number; draft?: Draft }
+  | { t: "cursor"; at: Vec3 | null; cam?: Camera; draft?: Draft }
   | { t: "leave" }
   | { t: "name"; name: string }
   | { t: "rename"; name: string };
 
-export type Reason = "held" | "stale" | "missing" | "exists" | "invalid" | "full" | "busy";
+export type Reason = "held" | "stale" | "missing" | "exists" | "invalid" | "used" | "full";
+
+export type Cursor = { id: string; at: Vec3 | null; cam?: Camera; draft?: Draft };
 
 export type ServerMessage =
   | {
       t: "welcome";
       you: Person;
-      sheet: Sheet;
-      shapes: Shape[];
+      design: Design;
+      features: Stored[];
       people: Person[];
       authors: Person[];
       holds: Record<string, string>;
     }
-  | { t: "put"; shape: Shape }
+  | { t: "put"; feature: Stored }
   | { t: "del"; id: string; by: string }
   | { t: "people"; people: Person[] }
   | { t: "holds"; holds: Record<string, string> }
-  | { t: "cursors"; cursors: { id: string; x: number; y: number; draft?: Draft }[]; gone: string[] }
-  | { t: "sheet"; sheet: Sheet }
-  // Sent only to the person whose edit was refused. `shape` is what the server
-  // holds now (null if it no longer exists), so the client can put it back, and
-  // `who` is the person responsible, where there is one.
-  | { t: "reject"; id: string; reason: Reason; message: string; shape: Shape | null; who?: string }
+  | { t: "cursors"; cursors: Cursor[]; gone: string[] }
+  | { t: "design"; design: Design }
+  // Sent only to the person whose edit was refused. `feature` is what the
+  // server holds now (null if it no longer exists), so the client can put it
+  // back, and `who` is the person responsible, where there is one.
+  | { t: "reject"; id: string; reason: Reason; message: string; feature: Stored | null; who?: string }
   | { t: "error"; message: string };
 
-// The people palette. Colours are how people tell each other apart on the
-// sheet, so they are picked to stay distinct from each other and from the ink.
+// The people palette. Colours are how people tell each other apart in the
+// viewport, so they stay distinct from each other and from the appearances.
 export const PEOPLE_COLOURS = [
-  "#d1495b",
-  "#00798c",
-  "#edae49",
-  "#7b2cbf",
-  "#2a9d8f",
-  "#e76f51",
-  "#3a86ff",
-  "#8ac926",
-  "#ff4fa3",
-  "#6d597a",
+  "#e5484d",
+  "#0091a8",
+  "#f5a524",
+  "#8e4ec6",
+  "#30a46c",
+  "#f76b15",
+  "#3e63dd",
+  "#d6409f",
+  "#7c8a00",
+  "#6e56cf",
 ];
 
 export const LIMITS = {
-  messageBytes: 16 * 1024,
-  shapesPerSheet: 5000,
+  messageBytes: 32 * 1024,
+  featuresPerDesign: 400,
   messagesPerSecond: 120,
-  draftShapes: 50,
+  draftFeatures: 20,
   nameLength: 32,
   holdIdleMs: 120_000,
   cursorFlushMs: 50,

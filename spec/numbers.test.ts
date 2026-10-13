@@ -1,93 +1,120 @@
-// Promise 1: the numbers are true. Geometry the server cannot draw at size is
-// refused with a reason, everything is rounded to the micron, and the exports
-// are the stored shapes in millimetres.
+// Promise 1: the numbers are true. A feature the server cannot build at size
+// is refused with a reason, a combine that refers to something it cannot use
+// is refused, and the STL export is the stored timeline in millimetres: the
+// spec measures its volume and size.
 
 import { describe, expect, it } from "vitest";
-import { validateGeometry } from "../shared/geometry.ts";
-import { add, baseUrl, id, newSheet, stored, visit } from "./people.ts";
+import { validateFeature } from "../shared/model.ts";
+import { add, baseUrl, box, cylinder, id, newDesign, readStl, stored, visit } from "./people.ts";
 
-describe("geometry the server refuses", () => {
+const place = { name: "x", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#b9bec4" };
+
+describe("features the server refuses", () => {
   const bad: [string, unknown][] = [
-    ["a negative radius", { kind: "circle", cx: 0, cy: 0, r: -1 }],
-    ["a zero-length line", { kind: "line", x1: 5, y1: 5, x2: 5, y2: 5 }],
-    ["a flat rectangle", { kind: "rect", x: 0, y: 0, w: 10, h: 0 }],
-    ["a string for a number", { kind: "line", x1: "0", y1: 0, x2: 10, y2: 0 }],
-    ["a missing field", { kind: "circle", cx: 0, cy: 0 }],
-    ["a point a kilometre away", { kind: "circle", cx: 1_000_000, cy: 0, r: 1 }],
-    ["an unknown kind", { kind: "spline", x: 0 }],
+    ["a negative radius", { ...place, kind: "cylinder", r: -1, h: 10 }],
+    ["a box with no height", { ...place, kind: "box", w: 10, h: 0, d: 10, fillet: 0 }],
+    ["a fillet bigger than the box", { ...place, kind: "box", w: 10, h: 10, d: 10, fillet: 5 }],
+    ["a torus tube thicker than its ring", { ...place, kind: "torus", R: 5, r: 6 }],
+    ["a sketch with no area", { ...place, kind: "extrude", depth: 5, profile: { type: "poly", pts: [[0, 0], [10, 0], [20, 0]] } }],
+    ["an extrude that goes nowhere", { ...place, kind: "extrude", depth: 0, profile: { type: "circle", cx: 0, cy: 0, r: 5 } }],
+    ["a string for a number", { ...place, kind: "sphere", r: "5" }],
+    ["a position a kilometre away", { ...place, kind: "sphere", r: 5, pos: [1_000_000, 0, 0] }],
+    ["an unknown kind", { ...place, kind: "spline" }],
   ];
 
-  for (const [what, g] of bad) {
+  for (const [what, f] of bad) {
     it(`refuses ${what}, says why, and stores nothing`, async () => {
-      const sheet = await newSheet();
-      const a = await visit(sheet.id);
-      a.send({ t: "add", id: id(), g: g as never });
+      const design = await newDesign();
+      const a = await visit(design.id);
+      a.send({ t: "add", id: id(), f: f as never });
       const no = await a.next("reject");
       expect(no.reason).toBe("invalid");
       expect(no.message.length).toBeGreaterThan(5);
-      expect(await stored(sheet.id)).toEqual([]);
+      expect(await stored(design.id)).toEqual([]);
       await a.close();
     });
   }
 
-  it("refuses changing a circle into a line", async () => {
-    const sheet = await newSheet();
-    const a = await visit(sheet.id);
-    const shape = await add(a, { kind: "circle", cx: 0, cy: 0, r: 3 });
-    a.send({ t: "update", id: shape.id, base: 1, g: { kind: "line", x1: 0, y1: 0, x2: 1, y2: 1 } });
+  it("refuses a combine whose bodies do not exist, or are already used up", async () => {
+    const design = await newDesign();
+    const a = await visit(design.id);
+    const target = await add(a, box());
+    const tool = await add(a, cylinder());
+    a.send({ t: "add", id: id(), f: { kind: "combine", name: "C", op: "cut", target: target.id, tools: ["nosuchbody"] } });
+    expect((await a.next("reject")).message).toContain("deleted");
+    const first = await add(a, { kind: "combine", name: "First", op: "cut", target: target.id, tools: [tool.id] });
+    a.send({ t: "add", id: id(), f: { kind: "combine", name: "Again", op: "join", target: target.id, tools: [tool.id] } });
+    expect((await a.next("reject")).message).toContain("used up by First");
+    a.send({ t: "add", id: id(), f: { kind: "combine", name: "Of", op: "join", target: first.id, tools: [tool.id] } });
+    expect((await a.next("reject")).reason).toBe("invalid");
+    expect(await stored(design.id)).toHaveLength(3);
+    await a.close();
+  });
+
+  it("refuses changing a box into a sphere", async () => {
+    const design = await newDesign();
+    const a = await visit(design.id);
+    const f = await add(a, box());
+    a.send({ t: "update", id: f.id, base: 1, f: { ...place, kind: "sphere", r: 3 } as never });
     expect((await a.next("reject")).reason).toBe("invalid");
     await a.close();
   });
 });
 
-it("rounds every coordinate to a thousandth of a millimetre", () => {
-  expect(validateGeometry({ kind: "circle", cx: 1.23456, cy: 7.0004, r: 2.0005 })).toEqual({
-    kind: "circle",
-    cx: 1.235,
-    cy: 7,
+it("rounds to a thousandth of a millimetre, and keeps angles in (-180, 180]", () => {
+  expect(validateFeature({ ...place, kind: "sphere", r: 2.0005, pos: [1.23456, 0, 0], rot: [370, -190, 180] })).toMatchObject({
     r: 2.001,
+    pos: [1.235, 0, 0],
+    rot: [10, 170, 180],
   });
 });
 
-describe("exports", () => {
-  async function drawn() {
-    const sheet = await newSheet("Box lid", 100, 50);
-    const a = await visit(sheet.id);
-    await add(a, { kind: "circle", cx: 20, cy: 10, r: 5 });
-    await add(a, { kind: "rect", x: 40, y: 5, w: 30, h: 20 });
-    await add(a, { kind: "line", x1: 0, y1: 45, x2: 100, y2: 45 });
-    await add(a, { kind: "dim", x1: 40, y1: 25, x2: 70, y2: 25, off: -6 });
-    await a.close();
-    return sheet;
+describe("the STL export", () => {
+  async function stl(design: string) {
+    const res = await fetch(new URL(`/d/${design}/export.stl`, baseUrl));
+    expect(res.headers.get("content-disposition")).toContain(".stl");
+    return readStl(await res.arrayBuffer());
   }
 
-  it("SVG is the sheet at size in millimetres, with every shape", async () => {
-    const sheet = await drawn();
-    const res = await fetch(new URL(`/s/${sheet.id}/export.svg`, baseUrl));
-    expect(res.headers.get("content-type")).toContain("image/svg+xml");
-    expect(res.headers.get("content-disposition")).toContain("box-lid.svg");
-    const svg = await res.text();
-    expect(svg).toContain('width="100mm" height="50mm" viewBox="0 0 100 50"');
-    expect(svg).toContain('<circle cx="20" cy="10" r="5"/>');
-    expect(svg).toContain('<rect x="40" y="5" width="30" height="20"/>');
-    expect(svg).toContain('<line x1="0" y1="45" x2="100" y2="45"/>');
-    expect(svg).toMatch(/<g id="dimensions"[^>]*>.*>30<\/text>/s);
+  it("is the body at size in millimetres, standing Z up", async () => {
+    const design = await newDesign("Block");
+    const a = await visit(design.id);
+    await add(a, box({ w: 10, h: 20, d: 30 }));
+    await a.close();
+    const s = await stl(design.id);
+    expect(s.volume).toBeCloseTo(6000, 1);
+    // model Y (height, 20) is STL Z; model Z (depth, 30) is STL Y
+    expect(s.max[0] - s.min[0]).toBeCloseTo(10, 3);
+    expect(s.max[1] - s.min[1]).toBeCloseTo(30, 3);
+    expect(s.max[2] - s.min[2]).toBeCloseTo(20, 3);
+    expect(s.min[2]).toBeCloseTo(0, 3);
   });
 
-  it("DXF is in millimetres, not mirrored, and carries cut lines only", async () => {
-    const sheet = await drawn();
-    const dxf = await (await fetch(new URL(`/s/${sheet.id}/export.dxf`, baseUrl))).text();
-    const lines = dxf.split("\r\n");
-    const units = lines.indexOf("$INSUNITS");
-    expect(lines.slice(units + 1, units + 3)).toEqual(["70", "4"]);
-    // the circle's centre is 10 mm from the top of a 50 mm sheet, so y = 40
-    // DXF is code/value pairs; read the circle's pairs up to the next entity
-    const circle = lines.indexOf("CIRCLE");
-    const pairs = new Map<string, string>();
-    for (let i = circle + 1; i + 1 < lines.length && lines[i] !== "0"; i += 2) pairs.set(lines[i], lines[i + 1]);
-    expect([pairs.get("10"), pairs.get("20"), pairs.get("40")]).toEqual(["20", "40", "5"]);
-    // one line plus four rectangle sides; the dimension is a note, not a cut
-    expect(lines.filter((l) => l === "LINE")).toHaveLength(5);
-    expect(dxf).not.toContain("TEXT");
+  it("carries a cut, and follows the cutter when it moves", async () => {
+    const design = await newDesign("Plate with a hole");
+    const a = await visit(design.id);
+    await add(a, box({ w: 40, h: 10, d: 40 }));
+    const plate = (await stored(design.id))[0];
+    const drill = await add(a, cylinder({ r: 5, h: 20, pos: [0, -5, 0] }));
+    await add(a, { kind: "combine", name: "Hole", op: "cut", target: plate.id, tools: [drill.id] });
+    // a 64-sided hole of radius 5 through 10 mm
+    const hole = 0.5 * 64 * 25 * Math.sin((2 * Math.PI) / 64) * 10;
+    expect((await stl(design.id)).volume).toBeCloseTo(16000 - hole, 0);
+
+    // move the drill clear of the plate: the hole goes with it
+    a.send({ t: "update", id: drill.id, base: 1, f: cylinder({ r: 5, h: 20, pos: [100, -5, 0] }) });
+    await a.next("put", (m) => m.feature.id === drill.id && m.feature.v === 2);
+    expect((await stl(design.id)).volume).toBeCloseTo(16000, 0);
+    await a.close();
+  });
+
+  it("leaves out bodies a combine has used up", async () => {
+    const design = await newDesign();
+    const a = await visit(design.id);
+    const target = await add(a, box({ w: 10, h: 10, d: 10 }));
+    const tool = await add(a, box({ w: 10, h: 10, d: 10, pos: [5, 0, 0] }));
+    await add(a, { kind: "combine", name: "Join", op: "join", target: target.id, tools: [tool.id] });
+    await a.close();
+    expect((await stl(design.id)).volume).toBeCloseTo(1500, 0);
   });
 });

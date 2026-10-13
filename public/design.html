@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>Design · Bench</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/build/design.js"></script>
+  </head>
+  <body class="app">
+    <svg class="sprites" aria-hidden="true">
+      <symbol id="i-sketch" viewBox="0 0 32 32"><rect x="4" y="8" width="20" height="16" fill="#e9f3fb" stroke="#0696d7" stroke-width="2"/><path d="M20 26 L28 6" stroke="#f0a020" stroke-width="3" stroke-linecap="round"/></symbol>
+      <symbol id="i-extrude" viewBox="0 0 32 32"><path d="M6 22 L16 27 L26 22 L26 12 L16 17 L6 12 Z" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5"/><path d="M6 12 L16 7 L26 12 L16 17 Z" fill="#b9d9f2" stroke="#2d5f8a" stroke-width="1.5"/><path d="M16 4 V0" stroke="#f0a020" stroke-width="2"/></symbol>
+      <symbol id="i-box" viewBox="0 0 32 32"><path d="M16 4 L28 10 L16 16 L4 10 Z" fill="#cfe3f3" stroke="#2d5f8a" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 10 L16 16 L16 29 L4 23 Z" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5" stroke-linejoin="round"/><path d="M28 10 L16 16 L16 29 L28 23 Z" fill="#4f8fc4" stroke="#2d5f8a" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+      <symbol id="i-cylinder" viewBox="0 0 32 32"><path d="M6 8 V24 A10 4 0 0 0 26 24 V8" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5"/><ellipse cx="16" cy="8" rx="10" ry="4" fill="#cfe3f3" stroke="#2d5f8a" stroke-width="1.5"/></symbol>
+      <symbol id="i-sphere" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5"/><ellipse cx="12" cy="11" rx="4" ry="3" fill="#cfe3f3"/></symbol>
+      <symbol id="i-cone" viewBox="0 0 32 32"><path d="M16 3 L27 24 A11 4 0 0 1 5 24 Z" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+      <symbol id="i-torus" viewBox="0 0 32 32"><ellipse cx="16" cy="17" rx="13" ry="8" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5"/><ellipse cx="16" cy="15" rx="5" ry="2.5" fill="#f5f6f8" stroke="#2d5f8a" stroke-width="1.5"/></symbol>
+      <symbol id="i-move" viewBox="0 0 32 32"><path d="M16 3 V29 M3 16 H29 M16 3 l-4 4 M16 3 l4 4 M16 29 l-4 -4 M16 29 l4 -4 M3 16 l4 -4 M3 16 l4 4 M29 16 l-4 -4 M29 16 l-4 4" stroke="#2d5f8a" stroke-width="2.2" fill="none" stroke-linecap="round"/></symbol>
+      <symbol id="i-combine" viewBox="0 0 32 32"><rect x="4" y="9" width="15" height="15" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.5"/><circle cx="21" cy="12" r="8" fill="#f0a020" fill-opacity="0.75" stroke="#a05f00" stroke-width="1.5"/></symbol>
+      <symbol id="i-delete" viewBox="0 0 32 32"><path d="M7 7 L25 25 M25 7 L7 25" stroke="#d6312b" stroke-width="4" stroke-linecap="round"/></symbol>
+      <symbol id="i-measure" viewBox="0 0 32 32"><rect x="3" y="11" width="26" height="10" rx="1" fill="#f6d36b" stroke="#8a6a00" stroke-width="1.5"/><path d="M8 11 V15 M13 11 V17 M18 11 V15 M23 11 V17" stroke="#8a6a00" stroke-width="1.5"/></symbol>
+      <symbol id="i-export" viewBox="0 0 32 32"><path d="M16 4 V20 M10 14 L16 20 L22 14" stroke="#2d5f8a" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 20 V27 H27 V20" stroke="#2d5f8a" stroke-width="2.5" fill="none" stroke-linejoin="round"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 32 32"><path d="M10 9 L4 15 L10 21 M4 15 H20 A7 7 0 0 1 20 29 H14" stroke="#3d434b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 32 32"><path d="M22 9 L28 15 L22 21 M28 15 H12 A7 7 0 0 0 12 29 H18" stroke="#3d434b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-line" viewBox="0 0 32 32"><path d="M5 25 L14 9 L27 18" stroke="#0696d7" stroke-width="2.5" fill="none" stroke-linejoin="round"/><circle cx="5" cy="25" r="2.5" fill="#0696d7"/><circle cx="14" cy="9" r="2.5" fill="#0696d7"/><circle cx="27" cy="18" r="2.5" fill="#0696d7"/></symbol>
+      <symbol id="i-rect" viewBox="0 0 32 32"><rect x="5" y="8" width="22" height="16" fill="none" stroke="#0696d7" stroke-width="2.5"/></symbol>
+      <symbol id="i-circle" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#0696d7" stroke-width="2.5"/><circle cx="16" cy="16" r="2" fill="#0696d7"/></symbol>
+      <symbol id="i-finish" viewBox="0 0 32 32"><rect x="3" y="3" width="26" height="26" rx="3" fill="#2e9e44"/><path d="M9 16 L14 21 L23 11" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12 C5 6 19 6 22 12 C19 18 5 18 2 12 Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2 12 C5 6 19 6 22 12 C19 18 5 18 2 12 Z" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".4"/><path d="M4 20 L20 4" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-body" viewBox="0 0 24 24"><path d="M12 3 L21 8 L12 13 L3 8 Z" fill="#cfe3f3" stroke="#2d5f8a" stroke-width="1.3"/><path d="M3 8 L12 13 L12 22 L3 17 Z" fill="#7fb6e0" stroke="#2d5f8a" stroke-width="1.3"/><path d="M21 8 L12 13 L12 22 L21 17 Z" fill="#4f8fc4" stroke="#2d5f8a" stroke-width="1.3"/></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" fill="#f0a020"/><path d="M8 9 H16 M8 13 H16 M8 17 H13" stroke="#fff" stroke-width="1.6"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 L12 3 L21 11 M6 9 V20 H18 V9" stroke="#3d434b" stroke-width="1.8" fill="none" stroke-linejoin="round"/></symbol>
+      <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 9 V3 H9 M15 3 H21 V9 M21 15 V21 H15 M9 21 H3 V15" stroke="#3d434b" stroke-width="1.8" fill="none"/><rect x="8" y="8" width="8" height="8" fill="#7fb6e0" stroke="#2d5f8a"/></symbol>
+      <symbol id="i-display" viewBox="0 0 24 24"><path d="M12 3 L21 8 L12 13 L3 8 Z" fill="#cfe3f3" stroke="#3d434b" stroke-width="1.3"/><path d="M3 8 L12 13 L12 22 L3 17 Z M21 8 L12 13 L12 22 L21 17 Z" fill="none" stroke="#3d434b" stroke-width="1.3"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><path d="M3 3 H21 V21 H3 Z M9 3 V21 M15 3 V21 M3 9 H21 M3 15 H21" stroke="#3d434b" stroke-width="1.4" fill="none"/></symbol>
+      <symbol id="i-first" viewBox="0 0 24 24"><path d="M6 5 V19 M19 5 L9 12 L19 19 Z" fill="#3d434b" stroke="#3d434b" stroke-width="1.5"/></symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24"><path d="M17 5 L7 12 L17 19 Z" fill="#3d434b"/></symbol>
+      <symbol id="i-next" viewBox="0 0 24 24"><path d="M7 5 L17 12 L7 19 Z" fill="#3d434b"/></symbol>
+      <symbol id="i-last" viewBox="0 0 24 24"><path d="M18 5 V19 M5 5 L15 12 L5 19 Z" fill="#3d434b" stroke="#3d434b" stroke-width="1.5"/></symbol>
+    </svg>
+
+    <header class="appbar">
+      <a class="logo" href="/" aria-label="Bench, all designs">B</a>
+      <div class="doc-tab">
+        <svg class="ico" aria-hidden="true"><use href="#i-doc"/></svg>
+        <input id="design-name" aria-label="Design name" maxlength="32" autocomplete="off" />
+      </div>
+      <a class="help" href="/readme/">About</a>
+      <div class="people">
+        <ul id="people" aria-label="People in this design"></ul>
+        <button type="button" id="me" class="me" aria-label="Change your name"></button>
+      </div>
+    </header>
+
+    <nav class="ribbon" aria-label="Commands">
+      <div class="tabs" role="presentation">
+        <span class="tab" id="tab-solid" aria-current="true">SOLID</span>
+        <span class="tab sketch-tab" id="tab-sketch" hidden>SKETCH</span>
+      </div>
+      <div class="groups" id="groups-solid">
+        <div class="group" role="group" aria-labelledby="g-create">
+          <div class="cmds">
+            <button type="button" class="cmd" data-cmd="sketch" aria-label="Create sketch"><svg aria-hidden="true"><use href="#i-sketch"/></svg><span>Sketch</span></button>
+            <button type="button" class="cmd" data-cmd="place:box" aria-label="Box"><svg aria-hidden="true"><use href="#i-box"/></svg><span>Box</span></button>
+            <button type="button" class="cmd" data-cmd="place:cylinder" aria-label="Cylinder"><svg aria-hidden="true"><use href="#i-cylinder"/></svg><span>Cylinder</span></button>
+            <button type="button" class="cmd" data-cmd="place:sphere" aria-label="Sphere"><svg aria-hidden="true"><use href="#i-sphere"/></svg><span>Sphere</span></button>
+            <button type="button" class="cmd" data-cmd="place:cone" aria-label="Cone"><svg aria-hidden="true"><use href="#i-cone"/></svg><span>Cone</span></button>
+            <button type="button" class="cmd" data-cmd="place:torus" aria-label="Torus"><svg aria-hidden="true"><use href="#i-torus"/></svg><span>Torus</span></button>
+          </div>
+          <span class="glabel" id="g-create">CREATE</span>
+        </div>
+        <div class="group" role="group" aria-labelledby="g-modify">
+          <div class="cmds">
+            <button type="button" class="cmd" data-cmd="move" aria-label="Move or rotate"><svg aria-hidden="true"><use href="#i-move"/></svg><span>Move</span></button>
+            <button type="button" class="cmd" data-cmd="combine" aria-label="Combine bodies"><svg aria-hidden="true"><use href="#i-combine"/></svg><span>Combine</span></button>
+            <button type="button" class="cmd" data-cmd="delete" aria-label="Delete"><svg aria-hidden="true"><use href="#i-delete"/></svg><span>Delete</span></button>
+          </div>
+          <span class="glabel" id="g-modify">MODIFY</span>
+        </div>
+        <div class="group" role="group" aria-labelledby="g-inspect">
+          <div class="cmds">
+            <button type="button" class="cmd" data-cmd="measure" aria-label="Measure"><svg aria-hidden="true"><use href="#i-measure"/></svg><span>Measure</span></button>
+          </div>
+          <span class="glabel" id="g-inspect">INSPECT</span>
+        </div>
+        <div class="group" role="group" aria-labelledby="g-file">
+          <div class="cmds">
+            <a class="cmd" id="export" download aria-label="Export STL"><svg aria-hidden="true"><use href="#i-export"/></svg><span>STL</span></a>
+            <button type="button" class="cmd" id="undo" aria-label="Undo"><svg aria-hidden="true"><use href="#i-undo"/></svg><span>Undo</span></button>
+            <button type="button" class="cmd" id="redo" aria-label="Redo"><svg aria-hidden="true"><use href="#i-redo"/></svg><span>Redo</span></button>
+          </div>
+          <span class="glabel" id="g-file">FILE</span>
+        </div>
+      </div>
+      <div class="groups" id="groups-sketch" hidden>
+        <div class="group" role="group" aria-labelledby="g-sk-create">
+          <div class="cmds">
+            <button type="button" class="cmd" data-sketch="line" aria-label="Line"><svg aria-hidden="true"><use href="#i-line"/></svg><span>Line</span></button>
+            <button type="button" class="cmd" data-sketch="rect" aria-label="Rectangle"><svg aria-hidden="true"><use href="#i-rect"/></svg><span>Rectangle</span></button>
+            <button type="button" class="cmd" data-sketch="circle" aria-label="Circle"><svg aria-hidden="true"><use href="#i-circle"/></svg><span>Circle</span></button>
+          </div>
+          <span class="glabel" id="g-sk-create">CREATE</span>
+        </div>
+        <div class="group" role="group" aria-labelledby="g-sk-finish">
+          <div class="cmds">
+            <button type="button" class="cmd" id="sketch-cancel" aria-label="Cancel sketch"><svg aria-hidden="true"><use href="#i-delete"/></svg><span>Cancel</span></button>
+          </div>
+          <span class="glabel" id="g-sk-finish">FINISH</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="work">
+      <aside class="browser" id="browser" aria-label="Browser">
+        <div class="browser-head">
+          <span>BROWSER</span>
+          <button type="button" id="browser-toggle" class="browser-toggle" aria-expanded="true" aria-controls="tree" aria-label="Show or hide the browser">‹</button>
+        </div>
+        <div id="tree" class="tree"></div>
+      </aside>
+
+      <section class="viewport" id="viewport" aria-label="3D view" aria-describedby="help">
+        <p id="help" class="visually-hidden">Drag to orbit, right-drag or two fingers to pan, scroll or pinch to zoom. Click a body to select it.</p>
+        <div id="labels" class="labels" aria-hidden="true"></div>
+        <div class="cube-wrap">
+          <button type="button" id="home" class="home" aria-label="Home view"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+          <div id="cube"></div>
+        </div>
+        <div id="banner" class="banner" role="status" hidden></div>
+        <aside id="panel" class="panel" aria-label="Properties" hidden></aside>
+        <div class="navbar" role="toolbar" aria-label="View">
+          <button type="button" id="fit" aria-label="Fit to view"><svg aria-hidden="true"><use href="#i-fit"/></svg></button>
+          <label class="nav-select"><svg aria-hidden="true"><use href="#i-display"/></svg><span class="visually-hidden">Display style</span>
+            <select id="display">
+              <option value="edges">Shaded, edges</option>
+              <option value="shaded">Shaded</option>
+              <option value="wire">Wireframe</option>
+            </select>
+          </label>
+          <label class="nav-select"><svg aria-hidden="true"><use href="#i-grid"/></svg><span class="visually-hidden">Snap step</span>
+            <select id="grid">
+              <option value="1">1 mm</option>
+              <option value="5">5 mm</option>
+              <option value="10" selected>10 mm</option>
+            </select>
+          </label>
+        </div>
+        <div id="offline" class="offline" role="alert" hidden>Reconnecting. Editing is paused so nothing you do is lost or replayed over someone else's work.</div>
+      </section>
+    </div>
+
+    <footer class="timeline">
+      <div class="playback" role="group" aria-label="Timeline">
+        <button type="button" id="tl-first" aria-label="Go to the start of the timeline"><svg aria-hidden="true"><use href="#i-first"/></svg></button>
+        <button type="button" id="tl-prev" aria-label="Step back"><svg aria-hidden="true"><use href="#i-prev"/></svg></button>
+        <button type="button" id="tl-next" aria-label="Step forward"><svg aria-hidden="true"><use href="#i-next"/></svg></button>
+        <button type="button" id="tl-last" aria-label="Go to the end of the timeline"><svg aria-hidden="true"><use href="#i-last"/></svg></button>
+      </div>
+      <ol id="track" class="track" aria-label="Features in order"></ol>
+      <div class="status">
+        <span id="conn" class="conn">Connecting…</span>
+        <span id="message" class="message" role="status" aria-live="polite"></span>
+      </div>
+    </footer>
+
+    <dialog id="name-dialog" class="name-dialog">
+      <form method="dialog" id="name-form">
+        <h2>Who's designing?</h2>
+        <p>Everyone in this design sees this name on your cursor and on anything you hold.</p>
+        <label>Your name <input id="name-input" maxlength="32" required autocomplete="nickname" /></label>
+        <button type="submit" class="primary">Start</button>
+      </form>
+    </dialog>
+  </body>
+</html>

@@ -1,5 +1,5 @@
-// The whole server: static pages, a small JSON API, the exports, /readme/ and
-// the WebSocket each open sheet talks through. One process, one SQLite file.
+// The whole server: static pages, a small JSON API, the STL export, /readme/
+// and the WebSocket each open design talks through. One process, one SQLite file.
 
 import { randomBytes } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
@@ -7,9 +7,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize, sep } from "node:path";
 import { marked } from "marked";
 import { WebSocketServer } from "ws";
-import { LIMITS, cleanName, type Sheet } from "../shared/protocol.ts";
+import { LIMITS, cleanName, type Design } from "../shared/protocol.ts";
 import * as db from "./db.ts";
-import { toDxf, toSvg } from "./export.ts";
+import { toStl } from "./export.ts";
 import { onlineCounts, roomFor } from "./room.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -33,15 +33,15 @@ const TYPES: Record<string, string> = {
 // stray CDN link fails loudly in development instead of quietly in production.
 const HEADERS = {
   "Content-Security-Policy":
-    "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; frame-ancestors 'none'",
+    "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data: blob:; style-src 'self'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "same-origin",
 };
 
-// The sheet a fresh install opens with, so a room full of people has one
+// The design a fresh install opens with, so a room full of people has one
 // obvious place to start.
-if (db.listSheets().length === 0) {
-  db.addSheet({ id: newId(), name: "The big sheet", w: 600, h: 400 });
+if (db.listDesigns().length === 0) {
+  db.addDesign({ id: newId(), name: "Workshop" });
 }
 
 function newId(): string {
@@ -86,7 +86,7 @@ async function body(req: IncomingMessage): Promise<unknown> {
 }
 
 function slug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "sheet";
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "design";
 }
 
 // README.md, rendered on the server so every heading is in the HTML before any
@@ -109,53 +109,43 @@ const server = createServer(async (req, res) => {
       return file(res, DOCS, decodeURIComponent(path.slice("/readme/docs/".length))) || notFound(res);
     }
 
-    if (path === "/api/sheets" && req.method === "GET") {
+    if (path === "/api/designs" && req.method === "GET") {
       const online = onlineCounts();
       return json(
         res,
         200,
-        db.listSheets().map((s) => ({ ...s, online: online.get(s.id) ?? 0 })),
+        db.listDesigns().map((d) => ({ ...d, online: online.get(d.id) ?? 0 })),
       );
     }
-    if (path === "/api/sheets" && req.method === "POST") {
-      let input: { name?: unknown; w?: unknown; h?: unknown };
+    if (path === "/api/designs" && req.method === "POST") {
+      let input: { name?: unknown };
       try {
         input = (await body(req)) as typeof input;
       } catch {
         return json(res, 400, { error: "send a JSON object" });
       }
       const name = cleanName(input.name);
-      const w = Number(input.w);
-      const h = Number(input.h);
-      if (!name) return json(res, 400, { error: "a sheet needs a name" });
-      if (!(w >= 10 && w <= 2000 && h >= 10 && h <= 2000)) {
-        return json(res, 400, { error: "width and height are between 10 and 2000 mm" });
-      }
-      const sheet: Sheet = { id: newId(), name, w: Math.round(w * 10) / 10, h: Math.round(h * 10) / 10 };
-      db.addSheet(sheet);
-      return json(res, 201, sheet);
+      if (!name) return json(res, 400, { error: "a design needs a name" });
+      const design: Design = { id: newId(), name };
+      db.addDesign(design);
+      return json(res, 201, design);
     }
 
-    const api = path.match(/^\/api\/sheets\/([A-Za-z0-9]{1,20})$/);
+    const api = path.match(/^\/api\/designs\/([A-Za-z0-9]{1,20})$/);
     if (api && req.method === "GET") {
-      const sheet = db.getSheet(api[1]);
-      if (!sheet) return json(res, 404, { error: "no such sheet" });
-      return json(res, 200, { sheet, shapes: db.loadShapes(sheet.id) });
+      const design = db.getDesign(api[1]);
+      if (!design) return json(res, 404, { error: "no such design" });
+      return json(res, 200, { design, features: db.loadFeatures(design.id) });
     }
-    const page = path.match(/^\/s\/([A-Za-z0-9]{1,20})\/?(export\.svg|export\.dxf)?$/);
+
+    const page = path.match(/^\/d\/([A-Za-z0-9]{1,20})\/?(export\.stl)?$/);
     if (page && req.method === "GET") {
-      const sheet = db.getSheet(page[1]);
-      if (!sheet) return notFound(res);
-      if (!page[2]) return file(res, PUBLIC, "sheet.html") || notFound(res);
-      const shapes = db.loadShapes(sheet.id);
-      const svg = page[2] === "export.svg";
-      return send(
-        res,
-        200,
-        svg ? "image/svg+xml; charset=utf-8" : "application/dxf",
-        svg ? toSvg(sheet, shapes) : toDxf(sheet, shapes),
-        { "Content-Disposition": `attachment; filename="${slug(sheet.name)}.${svg ? "svg" : "dxf"}"` },
-      );
+      const design = db.getDesign(page[1]);
+      if (!design) return notFound(res);
+      if (!page[2]) return file(res, PUBLIC, "design.html") || notFound(res);
+      return send(res, 200, "model/stl", toStl(design.name, db.loadFeatures(design.id)), {
+        "Content-Disposition": `attachment; filename="${slug(design.name)}.stl"`,
+      });
     }
 
     if (req.method === "GET" && !path.endsWith(".html") && file(res, PUBLIC, decodeURIComponent(path.slice(1)))) {
@@ -172,8 +162,8 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: LIMITS.messageByte
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://local");
-  const sheet = url.pathname === "/ws" ? db.getSheet(url.searchParams.get("sheet") ?? "") : undefined;
-  if (!sheet) {
+  const design = url.pathname === "/ws" ? db.getDesign(url.searchParams.get("design") ?? "") : undefined;
+  if (!design) {
     socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
     socket.destroy();
     return;
@@ -189,7 +179,7 @@ server.on("upgrade", (req, socket, head) => {
       ws.ping();
     }, 25_000);
     ws.on("close", () => clearInterval(ping));
-    roomFor(sheet).join(ws);
+    roomFor(design).join(ws);
   });
 });
 
