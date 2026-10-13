@@ -27,6 +27,7 @@ const TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".webp": "image/webp",
   ".ico": "image/x-icon",
+  ".md": "text/plain; charset=utf-8",
 };
 
 // Everything the pages load comes from this server; the CSP says so, so a

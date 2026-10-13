@@ -38,7 +38,8 @@ sent from an out-of-date view is refused and explained instead of applied over
 newer work. A body that a combine uses cannot be deleted from under it. This
 is the centre of the app and the opposite of what most shared canvases do:
 they let the last write win quietly, which is fine for sticky notes and wrong
-for a hole a bolt has to go through.
+for a hole a bolt has to go through. The options weighed, and what this
+choice costs, are in [ADR 0001](docs/adr/0001-two-people-one-body.md).
 
 **You can see the other people.** Cursors in 3D, names on what people hold,
 bodies moving while they are dragged, and following someone's camera.
