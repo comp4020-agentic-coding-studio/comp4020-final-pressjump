@@ -85,6 +85,17 @@ stop and say so instead of building it; the README says why each was left out.
 - **A new spec test first catches a deliberate bug.** Break what it forbids,
   watch it fail, put it back. A test that has only ever been green has not been
   shown to test anything.
+- **Restarts are checked by restarting.** The spec runs against a server that
+  stays up, so it cannot see a restart. After any change to `server/db.ts` or
+  to the order of writes in `server/room.ts`: draw something, kill the server
+  process (not Ctrl+C, which closes the database cleanly), start it again and
+  open the sheet. It has to be there.
+- **Two browsers, before saying a change to the editor works.** One desktop
+  window and one at phone size with touch, as two people, doing the thing the
+  change touched. The marker tests it that way, so that is the proof.
+- **A class names one kind of thing.** The hold tag and the cursor name tag
+  once shared `.hold-label`, so "is anything held?" was true whenever anyone's
+  cursor was on screen. Overlay elements get a class of their own.
 - **Corrections land here or in `spec/`.** When the agent gets something wrong
   in a way that could happen again, the fix is a rule in this file or a test,
   not just a retry.
