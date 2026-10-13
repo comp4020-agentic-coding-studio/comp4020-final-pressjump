@@ -118,11 +118,20 @@ CLAUDE.md now says to kill by PID.
 
 ## Where it stands
 
-Real-time is built and tested. Two people see each other's edits, 3D cursors
-and in-progress drags within a second; the spec measures under a second
-against the running server. It is not yet deployed: the Fly token is not on
-this machine, and the Dockerfile has not been built anywhere. That is the next
-step, and the riskiest one left.
+Real-time is built, tested and deployed at
+https://comp4020-final-pressjump.fly.dev. The first deploy was also the
+Dockerfile's first build, and it worked first time.
+
+I checked the live site, not just the local copy:
+
+- the course's two invariant tests pass against it
+- two scripted visitors saw each other's edits in 23 to 29 ms
+- a box survived a restart of the Fly machine, which shows the `/data` volume
+  is doing its job; the probe was deleted afterwards
+- the design page loads at desktop and phone widths with no console errors
+
+The full spec is not run against the live site, because it would leave its
+test designs there for the marker to find.
 
 [YOU: anything about the crit 9 session itself, once it has happened: what the
 pod argued, and whether it changed the ADR.]
