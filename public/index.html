@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bench</title>
+    <meta name="description" content="A shared drafting table: a few people, one sheet, millimetres, a part at the end." />
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/build/home.js"></script>
+  </head>
+  <body class="doc">
+    <main class="home">
+      <header class="intro">
+        <h1>Bench</h1>
+        <p class="lede">A shared drafting table. A few people, one sheet, millimetres, and a part at the end.</p>
+        <p>Open a sheet and you are drawing with everyone else who has it open. New here? <a href="/readme/">Read what this is for</a> first; it takes two minutes.</p>
+      </header>
+
+      <section aria-labelledby="sheets-h">
+        <h2 id="sheets-h">Sheets</h2>
+        <p id="sheets-status" class="muted" role="status">Loading sheets…</p>
+        <ul id="sheets" class="sheets"></ul>
+      </section>
+
+      <section aria-labelledby="new-h">
+        <h2 id="new-h">Start a sheet</h2>
+        <form id="new-sheet" class="new-sheet">
+          <label>Name <input name="name" required maxlength="32" autocomplete="off" placeholder="Box for the Pi" /></label>
+          <label>Size
+            <select name="size">
+              <option value="600x400">Laser bed, 600 × 400 mm</option>
+              <option value="300x200">Small laser bed, 300 × 200 mm</option>
+              <option value="297x210">A4, 297 × 210 mm</option>
+              <option value="420x297">A3, 420 × 297 mm</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          <span class="custom" hidden>
+            <label>Width (mm) <input name="w" type="number" min="10" max="2000" step="any" value="600" /></label>
+            <label>Height (mm) <input name="h" type="number" min="10" max="2000" step="any" value="400" /></label>
+          </span>
+          <button type="submit" class="primary">Start sheet</button>
+          <p id="new-error" class="error" role="alert"></p>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>
