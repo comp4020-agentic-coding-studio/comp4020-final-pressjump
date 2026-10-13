@@ -1322,8 +1322,8 @@ function renderGrid(): void {
   gridMajor.setAttribute("d", lines(major, 0));
 }
 
-function tag(x: number, y: number, text: string, colour: string): SVGGElement {
-  const g = el("g", { class: "hold-label", transform: `translate(${Math.round(x)} ${Math.round(y)})` });
+function tag(x: number, y: number, text: string, colour: string, cls: string): SVGGElement {
+  const g = el("g", { class: cls, transform: `translate(${Math.round(x)} ${Math.round(y)})` });
   const t = el("text", { class: "tag", x: 6, y: 13 });
   t.textContent = text;
   const bg = el("rect", { x: 0, y: 0, rx: 4, height: 18, width: Math.max(24, text.length * 6.6 + 12) });
@@ -1373,7 +1373,7 @@ function render(): void {
     labelled.add(holder);
     const b = bounds(g);
     const p = toScreen({ x: b.x0, y: b.y0 });
-    overlay.append(tag(p.x, p.y - 22, nameOf(holder), colourOf(holder)));
+    overlay.append(tag(p.x, p.y - 22, nameOf(holder), colourOf(holder), "hold-label"));
   }
 
   // handles on a single selected shape
@@ -1405,7 +1405,7 @@ function render(): void {
     const g = el("g", { class: "cursor-label", transform: `translate(${Math.round(p.x)} ${Math.round(p.y)})` });
     const arrow = el("path", { d: "M0 0L0 16L4.5 12L8 19L10.5 18L7 11L13 11Z", stroke: "#fff", "stroke-width": 1 });
     arrow.style.fill = colour;
-    g.append(arrow, tag(12, 16, nameOf(id), colour));
+    g.append(arrow, tag(12, 16, nameOf(id), colour, "name-label"));
     overlay.append(g);
   }
 }

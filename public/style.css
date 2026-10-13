@@ -504,6 +504,7 @@ kbd {
 }
 
 .cursor-label,
+.name-label,
 .hold-label {
   pointer-events: none;
 }
