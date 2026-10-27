@@ -533,7 +533,7 @@ function drawGhosts(): void {
   for (const id of selection) {
     const f = features.get(id);
     if (f && isBodyFeature(f) && evaluated.consumed.has(id)) {
-      items.push({ geometry: worldGeometry({ ...f, ...overrides.get(id) } as Body), colour: "#0696d7", opacity: 0.18 });
+      items.push({ geometry: worldGeometry({ ...f, ...overrides.get(id) } as Body), colour: "#0c66e4", opacity: 0.18 });
     }
   }
   for (const [pid, c] of remote) {
@@ -542,7 +542,7 @@ function drawGhosts(): void {
     }
   }
   const preview = previewBody();
-  if (preview) items.push({ geometry: worldGeometry(preview.body), colour: preview.cut ? "#d6312b" : "#0696d7", opacity: 0.3 });
+  if (preview) items.push({ geometry: worldGeometry(preview.body), colour: preview.cut ? "#d6312b" : "#0c66e4", opacity: 0.3 });
   vp.setGhosts(items);
 }
 
@@ -900,8 +900,8 @@ function sendCursor(): void {
 
 // ---------- overlays: sketch lines, measurement, labels ----------
 
-const overlayMat = new THREE.LineBasicMaterial({ color: 0x0696d7, depthTest: false });
-const pointMat = new THREE.PointsMaterial({ color: 0x0696d7, size: 8, sizeAttenuation: false, depthTest: false });
+const overlayMat = new THREE.LineBasicMaterial({ color: 0x0c66e4, depthTest: false });
+const pointMat = new THREE.PointsMaterial({ color: 0x0c66e4, size: 8, sizeAttenuation: false, depthTest: false });
 
 function drawOverlay(): void {
   vp.overlay.clear();
@@ -927,7 +927,7 @@ function drawOverlay(): void {
     // the sketch plane itself, a faint square
     const s = 150;
     const corners = ([[-s, -s], [s, -s], [s, s], [-s, s], [-s, -s]] as [number, number][]).map((p) => fromPlane(plane, p));
-    vp.overlay.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineDashedMaterial({ color: 0x0696d7, dashSize: 4, gapSize: 4 })));
+    vp.overlay.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineDashedMaterial({ color: 0x0c66e4, dashSize: 4, gapSize: 4 })));
   }
   if (mode.kind === "measure" && mode.a) {
     const pts = mode.b ? [mode.a, mode.b] : [mode.a];

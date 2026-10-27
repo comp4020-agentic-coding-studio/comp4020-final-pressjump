@@ -257,13 +257,15 @@ kbd {
 /* ---------- the design page ---------- */
 
 .app {
-  --chrome: #f5f5f5;
-  --edge: #d4d4d4;
-  --text: #2b2d31;
-  --text-2: #6b7078;
-  --blue: #0696d7;
-  --blue-soft: #d9eef9;
-  --danger: #d6312b;
+  --chrome: #ffffff;
+  --well: #f4f6fa;
+  --hover: #eef2f8;
+  --edge: #e4e7ec;
+  --text: #172b4d;
+  --text-2: #626f86;
+  --blue: #0c66e4;
+  --blue-soft: #e9f2ff;
+  --danger: #c9372c;
   color-scheme: light;
   height: 100dvh;
   display: grid;
@@ -272,6 +274,7 @@ kbd {
   background: var(--chrome);
   color: var(--text);
   font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
 
 .sprites {
@@ -281,17 +284,26 @@ kbd {
 .app button,
 .app select,
 .app input {
-  min-height: 28px;
-  border-radius: 3px;
-  border-color: var(--edge);
-  background: #fff;
+  min-height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--well);
   color: var(--text);
+}
+
+.app button:hover {
+  background: var(--hover);
 }
 
 .app button.primary {
   background: var(--blue);
   border-color: var(--blue);
   color: #fff;
+  font-weight: 600;
+}
+
+.app button.primary:hover {
+  background: #0055cc;
 }
 
 .app :focus-visible {
@@ -311,10 +323,9 @@ kbd {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 40px;
-  padding: 0 10px;
-  background: #e6e6e6;
-  border-bottom: 1px solid var(--edge);
+  height: 48px;
+  padding: 0 12px;
+  background: var(--chrome);
   min-width: 0;
 }
 
@@ -322,26 +333,27 @@ kbd {
   display: grid;
   place-items: center;
   flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 4px;
-  background: #f28c28;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--blue);
   color: #fff;
   font-weight: 800;
   text-decoration: none;
+}
+
+.logo svg {
+  width: 30px;
+  height: 30px;
 }
 
 .doc-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  margin-top: 8px;
-  padding: 0 10px;
-  background: var(--chrome);
-  border: 1px solid var(--edge);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  height: 34px;
+  padding: 0 4px 0 10px;
+  border-radius: 8px;
   min-width: 0;
 }
 
@@ -350,17 +362,24 @@ kbd {
   min-width: 0;
   border-color: transparent;
   background: transparent;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .app .doc-tab input:hover,
 .app .doc-tab input:focus {
-  border-color: var(--edge);
-  background: #fff;
+  background: var(--well);
 }
 
 .help {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.help:hover {
+  color: var(--blue);
 }
 
 .people {
@@ -390,7 +409,7 @@ kbd {
   min-height: 26px;
   padding: 0;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--chrome);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -406,8 +425,8 @@ kbd {
   top: calc(100% + 6px);
   z-index: 20;
   padding: 4px 8px;
-  border-radius: 4px;
-  background: #2b2d31;
+  border-radius: 6px;
+  background: var(--text);
   color: #fff;
   font-size: 12px;
   white-space: nowrap;
@@ -435,25 +454,26 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 10px 2px 2px;
-  border-radius: 16px;
+  padding: 2px 12px 2px 2px;
+  border-radius: 999px;
+  font-weight: 600;
 }
 
 /* ribbon */
 
 .ribbon {
   background: var(--chrome);
-  border-bottom: 1px solid var(--edge);
+  box-shadow: inset 0 -1px 0 var(--edge);
   min-width: 0;
 }
 
 .tabs {
   display: flex;
   gap: 18px;
-  padding: 4px 14px 0;
+  padding: 0 16px;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   color: var(--text-2);
 }
 
@@ -491,8 +511,8 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 8px 2px;
-  border-right: 1px solid var(--edge);
+  padding: 6px 10px 4px;
+  box-shadow: inset -1px 0 0 var(--edge);
 }
 
 .cmds {
@@ -505,15 +525,16 @@ kbd {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  min-width: 52px;
-  min-height: 50px;
-  padding: 3px 4px;
+  gap: 2px;
+  min-width: 56px;
+  min-height: 54px;
+  padding: 4px 6px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 550;
   text-decoration: none;
   cursor: pointer;
 }
@@ -524,13 +545,12 @@ kbd {
 }
 
 .app .cmd:hover {
-  background: #e3eef6;
-  border-color: #b9d6ea;
+  background: var(--hover);
 }
 
 .app .cmd[aria-pressed="true"] {
   background: var(--blue-soft);
-  border-color: var(--blue);
+  color: var(--blue);
 }
 
 .app .cmd:disabled {
@@ -538,10 +558,10 @@ kbd {
 }
 
 .glabel {
-  margin-top: 1px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   color: var(--text-2);
 }
 
@@ -562,8 +582,7 @@ kbd {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--chrome);
-  border-right: 1px solid var(--edge);
+  background: #f8f9fb;
 }
 
 .browser.collapsed .tree,
@@ -575,12 +594,11 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px 4px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  padding: 10px 8px 6px 14px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   color: var(--text-2);
-  border-bottom: 1px solid var(--edge);
 }
 
 .app .browser-toggle {
@@ -592,7 +610,7 @@ kbd {
 
 .tree {
   overflow: auto;
-  padding: 4px 0;
+  padding: 2px 6px 8px;
 }
 
 .app .tree summary {
@@ -603,7 +621,8 @@ kbd {
   align-items: center;
   gap: 6px;
   padding: 3px 8px;
-  min-height: 26px;
+  min-height: 28px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -621,11 +640,21 @@ kbd {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 6px 0 30px;
+  padding: 0 6px 0 26px;
+  border-radius: 6px;
+}
+
+.tree .row:hover {
+  background: var(--hover);
 }
 
 .tree .row.selected {
   background: var(--blue-soft);
+}
+
+.tree .row.selected .name {
+  color: var(--blue);
+  font-weight: 600;
 }
 
 .tree .row.used .name,
@@ -682,7 +711,7 @@ kbd {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: linear-gradient(#ffffff, #dfe3e8);
+  background: var(--well);
 }
 
 .viewport > canvas {
@@ -704,11 +733,11 @@ kbd {
   position: absolute;
   left: 0;
   top: 0;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 2px 8px;
+  border-radius: 6px;
   color: #fff;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 650;
   white-space: nowrap;
 }
 
@@ -759,8 +788,9 @@ kbd {
   border-radius: 4px;
   background: #2b2d31e6;
   color: #fff;
-  font-size: 12px;
-  text-align: center;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-align: left;
 }
 
 .banner[hidden],
@@ -775,11 +805,11 @@ kbd {
   left: 50%;
   translate: -50% 0;
   max-width: calc(100% - 24px);
-  padding: 8px 12px;
-  border: 1px solid var(--danger);
-  border-radius: 4px;
-  background: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #ffeceb;
   color: var(--danger);
+  font-weight: 600;
 }
 
 .navbar {
@@ -790,10 +820,10 @@ kbd {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px 4px;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  background: #fafafa;
+  padding: 4px 6px;
+  border-radius: 12px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
 }
 
 .app .navbar button {
@@ -828,28 +858,31 @@ kbd {
   position: absolute;
   top: 10px;
   right: 120px;
-  width: 280px;
-  max-height: calc(100% - 70px);
+  width: 292px;
+  max-height: calc(100% - 76px);
   overflow: auto;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  background: #fbfbfb;
-  box-shadow: 0 2px 10px #0002;
+  border-radius: 14px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
 }
 
 .panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 4px 4px 12px;
-  background: #e9e9e9;
-  border-bottom: 1px solid var(--edge);
+  padding: 8px 6px 4px 12px;
+  background: var(--chrome);
 }
 
 .panel-head h2 {
   margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
 }
 
 .app .panel-head .close {
@@ -862,7 +895,7 @@ kbd {
 }
 
 .panel h3 {
-  margin: 10px 12px 4px;
+  margin: 10px 12px 2px;
   font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -874,7 +907,7 @@ kbd {
   grid-template-columns: 1fr 1.2fr;
   align-items: center;
   gap: 6px;
-  margin: 4px 12px;
+  margin: 3px 12px;
 }
 
 .panel label > span:first-child {
@@ -897,17 +930,25 @@ kbd {
   display: flex;
   align-items: center;
   min-width: 0;
-  border: 1px solid var(--edge);
-  border-radius: 3px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--well);
+}
+
+.input-unit:focus-within {
+  outline: 2px solid var(--blue);
 }
 
 .app .input-unit input {
   width: 100%;
   min-width: 0;
   border: none;
+  background: transparent;
   font-family: var(--mono);
   font-size: 12px;
+}
+
+.app .input-unit input:focus-visible {
+  outline: none;
 }
 
 .input-unit span {
@@ -924,32 +965,30 @@ kbd {
 
 .segmented {
   display: flex;
-  margin: 10px 12px 0;
+  gap: 4px;
+  margin: 8px 12px 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--well);
 }
 
 .app .segmented button {
   flex: 1;
-  border-radius: 0;
-}
-
-.app .segmented button:first-child {
-  border-radius: 3px 0 0 3px;
-}
-
-.app .segmented button:last-child {
-  border-radius: 0 3px 3px 0;
-  margin-left: -1px;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 600;
 }
 
 .app .segmented button[aria-pressed="true"] {
-  background: var(--blue-soft);
-  border-color: var(--blue);
+  background: var(--chrome);
+  color: var(--blue);
+  box-shadow: 0 0 0 1px var(--edge);
 }
 
 .swatches {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   margin: 4px 12px;
 }
 
@@ -968,9 +1007,9 @@ kbd {
 }
 
 .panel .note {
-  margin: 8px 12px;
+  margin: 6px 12px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .panel .note.warn {
@@ -981,9 +1020,13 @@ kbd {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--edge);
+  margin-top: 6px;
+  padding: 8px 12px 10px;
+}
+
+.app .panel-foot button {
+  padding: 0 14px;
+  font-weight: 600;
 }
 
 .app .panel-foot .danger {
@@ -997,11 +1040,11 @@ kbd {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 48px;
   min-width: 0;
-  padding: 4px 10px;
+  padding: 6px 12px;
   background: var(--chrome);
-  border-top: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 var(--edge);
 }
 
 .playback {
@@ -1037,14 +1080,13 @@ kbd {
 .app .step {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
   padding: 0;
   border: 2px solid transparent;
-  border-radius: 3px;
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--edge);
+  border-radius: 8px;
+  background: var(--well);
 }
 
 .step svg {
@@ -1061,8 +1103,8 @@ kbd {
 }
 
 .app .step.failed {
-  background: #fde4e3;
-  box-shadow: 0 0 0 1px var(--danger);
+  background: #ffeceb;
+  border-color: var(--danger);
 }
 
 .marker-end {
@@ -1085,8 +1127,19 @@ kbd {
 }
 
 .conn.live {
-  color: #2e9e44;
-  font-weight: 600;
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.conn.live::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  vertical-align: 1px;
 }
 
 .message {
@@ -1102,14 +1155,33 @@ kbd {
 
 .name-dialog {
   max-width: min(24rem, calc(100vw - 32px));
-  border: 1px solid var(--edge);
-  border-radius: 8px;
+  padding: 24px;
+  border: 0;
+  border-radius: 16px;
   background: #fff;
   color: var(--text);
 }
 
 .name-dialog::backdrop {
-  background: #0006;
+  background: #091e4266;
+}
+
+.name-dialog h2 {
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+
+.name-dialog p {
+  color: var(--text-2);
+}
+
+.name-dialog input {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.name-dialog button {
+  min-height: 40px;
 }
 
 .name-dialog form {
@@ -1158,7 +1230,7 @@ kbd {
     top: 0;
     bottom: 0;
     width: min(80vw, 260px);
-    box-shadow: 2px 0 10px #0003;
+    box-shadow: 1px 0 0 var(--edge);
   }
 
   .browser.collapsed {

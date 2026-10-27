@@ -14,7 +14,7 @@ export type Hit = { id: string | null; point: THREE.Vector3; normal: THREE.Vecto
 export type Display = "shaded" | "edges" | "wire";
 export type BodyStyle = { selected: boolean; holder: string | null; hidden: boolean };
 
-const ACCENT = new THREE.Color("#0696d7");
+const ACCENT = new THREE.Color("#0c66e4");
 
 export class Viewport {
   host: HTMLElement;
@@ -89,18 +89,18 @@ export class Viewport {
 
   buildGrid(step: number): void {
     this.grid.clear();
-    const minor = new THREE.GridHelper(1000, 1000 / step, 0xc9ced6, 0xdde1e7);
+    const minor = new THREE.GridHelper(1000, 1000 / step, 0xdfe4ec, 0xe6eaf0);
     (minor.material as THREE.Material).transparent = true;
     (minor.material as THREE.Material).opacity = 0.7;
-    const major = new THREE.GridHelper(1000, 10, 0xaab1bc, 0xaab1bc);
+    const major = new THREE.GridHelper(1000, 10, 0xc3cbd7, 0xc3cbd7);
     major.position.y = 0.01;
     const axis = (to: THREE.Vector3, colour: number): THREE.Line =>
       new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([to.clone().multiplyScalar(-500), to.clone().multiplyScalar(500)]),
         new THREE.LineBasicMaterial({ color: colour }),
       );
-    const x = axis(new THREE.Vector3(1, 0, 0), 0xd9534f);
-    const z = axis(new THREE.Vector3(0, 0, 1), 0x3a7bd5);
+    const x = axis(new THREE.Vector3(1, 0, 0), 0xe5484d);
+    const z = axis(new THREE.Vector3(0, 0, 1), 0x0c66e4);
     x.position.y = z.position.y = 0.02;
     this.grid.add(minor, major, x, z);
     this.schedule();
@@ -175,10 +175,10 @@ export class Viewport {
             eg = creases(s.geometry);
             this.edgeCache.set(s.geometry, eg);
           }
-          edges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x23262b }));
+          edges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x172b4d }));
           mesh.add(edges);
         }
-        (edges.material as THREE.LineBasicMaterial).color.set(st.selected ? ACCENT : st.holder ? colourOf(st.holder) : 0x23262b);
+        (edges.material as THREE.LineBasicMaterial).color.set(st.selected ? ACCENT : st.holder ? colourOf(st.holder) : 0x172b4d);
         edges.visible = true;
       } else if (edges) {
         edges.visible = false;
