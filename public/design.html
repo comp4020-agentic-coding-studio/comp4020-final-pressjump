@@ -18,6 +18,10 @@
       <symbol id="i-cone" viewBox="0 0 32 32"><path d="M16 3 L27 24 A11 4 0 0 1 5 24 Z" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5" stroke-linejoin="round"/></symbol>
       <symbol id="i-torus" viewBox="0 0 32 32"><ellipse cx="16" cy="17" rx="13" ry="8" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5"/><ellipse cx="16" cy="15" rx="5" ry="2.5" fill="#f5f6f8" stroke="#174a8c" stroke-width="1.5"/></symbol>
       <symbol id="i-move" viewBox="0 0 32 32"><path d="M16 3 V29 M3 16 H29 M16 3 l-4 4 M16 3 l4 4 M16 29 l-4 -4 M16 29 l4 -4 M3 16 l4 -4 M3 16 l4 4 M29 16 l-4 -4 M29 16 l-4 4" stroke="#174a8c" stroke-width="2.2" fill="none" stroke-linecap="round"/></symbol>
+      <symbol id="i-duplicate" viewBox="0 0 32 32"><rect x="4" y="11" width="15" height="15" rx="2" fill="#cce0ff" stroke="#174a8c" stroke-width="1.5"/><rect x="12" y="5" width="15" height="15" rx="2" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5"/><path d="M19.5 9.5 V15.5 M16.5 12.5 H22.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-mirror" viewBox="0 0 32 32"><path d="M16 3 V29" stroke="#0c66e4" stroke-width="2" stroke-dasharray="3 2.5"/><path d="M13 8 L4 24 H13 Z" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5" stroke-linejoin="round"/><path d="M19 8 L28 24 H19 Z" fill="#cce0ff" stroke="#174a8c" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+      <symbol id="i-pattern" viewBox="0 0 32 32"><rect x="3" y="11" width="7" height="10" rx="1.5" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5"/><rect x="12.5" y="11" width="7" height="10" rx="1.5" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5"/><rect x="22" y="11" width="7" height="10" rx="1.5" fill="#cce0ff" stroke="#174a8c" stroke-width="1.5" stroke-dasharray="2.5 2"/></symbol>
+      <symbol id="i-hole" viewBox="0 0 32 32"><path d="M3 14 L16 8 L29 14 L16 20 Z" fill="#cce0ff" stroke="#174a8c" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 14 V21 L16 27 V20 Z" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5" stroke-linejoin="round"/><path d="M29 14 V21 L16 27 V20 Z" fill="#4c8fe8" stroke="#174a8c" stroke-width="1.5" stroke-linejoin="round"/><ellipse cx="16" cy="14" rx="4.5" ry="2.2" fill="#174a8c"/><path d="M16 2 V9" stroke="#e5484d" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-combine" viewBox="0 0 32 32"><rect x="4" y="9" width="15" height="15" fill="#85b8ff" stroke="#174a8c" stroke-width="1.5"/><circle cx="21" cy="12" r="8" fill="#f0a020" fill-opacity="0.75" stroke="#a05f00" stroke-width="1.5"/></symbol>
       <symbol id="i-delete" viewBox="0 0 32 32"><path d="M7 7 L25 25 M25 7 L7 25" stroke="#d6312b" stroke-width="4" stroke-linecap="round"/></symbol>
       <symbol id="i-measure" viewBox="0 0 32 32"><rect x="3" y="11" width="26" height="10" rx="1" fill="#f6d36b" stroke="#8a6a00" stroke-width="1.5"/><path d="M8 11 V15 M13 11 V17 M18 11 V15 M23 11 V17" stroke="#8a6a00" stroke-width="1.5"/></symbol>
@@ -75,6 +79,10 @@
         <div class="group" role="group" aria-labelledby="g-modify">
           <div class="cmds">
             <button type="button" class="cmd" data-cmd="move" aria-label="Move or rotate"><svg aria-hidden="true"><use href="#i-move"/></svg><span>Move</span></button>
+            <button type="button" class="cmd" data-cmd="duplicate" aria-label="Duplicate (D)"><svg aria-hidden="true"><use href="#i-duplicate"/></svg><span>Duplicate</span></button>
+            <button type="button" class="cmd" data-cmd="mirror" aria-label="Mirror"><svg aria-hidden="true"><use href="#i-mirror"/></svg><span>Mirror</span></button>
+            <button type="button" class="cmd" data-cmd="pattern" aria-label="Pattern"><svg aria-hidden="true"><use href="#i-pattern"/></svg><span>Pattern</span></button>
+            <button type="button" class="cmd" data-cmd="hole" aria-label="Hole (H)"><svg aria-hidden="true"><use href="#i-hole"/></svg><span>Hole</span></button>
             <button type="button" class="cmd" data-cmd="combine" aria-label="Combine bodies"><svg aria-hidden="true"><use href="#i-combine"/></svg><span>Combine</span></button>
             <button type="button" class="cmd" data-cmd="delete" aria-label="Delete"><svg aria-hidden="true"><use href="#i-delete"/></svg><span>Delete</span></button>
           </div>

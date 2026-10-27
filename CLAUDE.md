@@ -73,6 +73,11 @@ solver, assemblies or joints: each would take far longer than this project has
 to do honestly, and a half-working one breaks promise 1. If a change seems to
 need one, stop and say so instead of building it.
 
+A chamfer is therefore a typed number on a box (every edge) or a cylinder
+(both rims), like a box's fillet, never an operation on picked edges. Tools
+that make things (Duplicate, Mirror, Pattern, Hole) only ever write ordinary
+bodies and combines through the usual versioned edits; none of them is a new
+kind of feature the server has to trust.
 ## Rules for the platform
 
 - **Node 24 runs the TypeScript directly.** Only erasable syntax: no `enum`,

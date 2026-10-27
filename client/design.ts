@@ -12,6 +12,7 @@ import {
   checkReferences,
   featureOf,
   isBodyFeature,
+  mirrorBody,
   round,
   sameFeature,
   usedBy,
@@ -24,7 +25,7 @@ import {
   type Stored,
   type Vec3,
 } from "../shared/model.ts";
-import { cleanName, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
+import { LIMITS, cleanName, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
 import { Viewport, type Display } from "./viewport.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
@@ -119,7 +120,13 @@ type Mode =
   | { kind: "measure"; a: THREE.Vector3 | null; b: THREE.Vector3 | null }
   | { kind: "sketch"; stage: "plane" }
   | { kind: "sketch"; stage: "draw"; plane: SketchPlane; tool: SketchTool; pts: [number, number][]; cursor: [number, number] | null }
-  | { kind: "extrude"; plane: SketchPlane; profile: Profile; depth: number; op: "new" | "join" | "cut"; name: string };
+  | { kind: "extrude"; plane: SketchPlane; profile: Profile; depth: number; op: "new" | "join" | "cut"; name: string }
+  | { kind: "hole"; d: number; depth: number };
+
+// Mirror and Pattern work on the selection, from a small panel of typed
+// numbers; null when neither is open.
+type ToolPanel = { kind: "mirror"; axis: "x" | "z"; at: number } | { kind: "pattern"; axis: "x" | "y" | "z"; count: number; spacing: number };
+let toolPanel: ToolPanel | null = null;
 
 type SketchTool = "line" | "rect" | "circle";
 type SketchPlane = { origin: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3; n: THREE.Vector3; body: string | null };
@@ -605,6 +612,10 @@ function placement(kind: Exclude<BodyKind, "extrude">, hit: { point: THREE.Vecto
 function previewBody(): { body: Body; cut: boolean } | null {
   if (mode.kind === "place" && hoverHit && mode.body !== "extrude") return { body: placement(mode.body, hoverHit), cut: false };
   if (mode.kind === "extrude") return { body: extrudeBody(mode), cut: mode.op === "cut" };
+  if (mode.kind === "hole" && hoverHit) {
+    const drillBody = holeDrill(mode, hoverHit);
+    return drillBody ? { body: drillBody, cut: true } : null;
+  }
   return null;
 }
 
@@ -960,6 +971,8 @@ function click(e: PointerEvent): void {
       if (hit) sketchClick(hit, e);
       return;
     }
+    case "hole":
+      return drill(e);
     case "extrude":
       return;
   }
@@ -969,7 +982,7 @@ let lastPointer: { clientX: number; clientY: number } | null = null;
 
 vp.canvas.addEventListener("pointermove", (e) => {
   lastPointer = { clientX: e.clientX, clientY: e.clientY };
-  if (mode.kind === "place") {
+  if (mode.kind === "place" || mode.kind === "hole") {
     hoverHit = vp.pick(e);
     drawGhosts();
   } else if (mode.kind === "sketch" && mode.stage === "draw") {
@@ -1290,6 +1303,7 @@ function renderBanner(): void {
   else if (mode.kind === "place") text = `Click the ground or a face to place a ${KIND_NAMES[mode.body].toLowerCase()}. Esc to stop.`;
   else if (mode.kind === "measure") text = "Click two points to measure between them. Esc to stop.";
   else if (mode.kind === "sketch" && mode.stage === "plane") text = "Click a face, or the ground, to sketch on. Esc to stop.";
+  else if (mode.kind === "hole") text = "Click a face of a body to drill a hole into it. Esc when done.";
   banner.hidden = !text;
   banner.textContent = text;
   document.body.classList.toggle("sketching", mode.kind === "sketch" && mode.stage === "draw");
@@ -1302,6 +1316,7 @@ function renderBanner(): void {
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-cmd]")) {
     const cmd = b.dataset.cmd;
     const on =
+      (cmd === "hole" && mode.kind === "hole") ||
       (cmd === "sketch" && mode.kind === "sketch") ||
       (cmd === `place:${mode.kind === "place" ? mode.body : ""}`) ||
       (cmd === "measure" && mode.kind === "measure") ||
@@ -1378,6 +1393,12 @@ function apply(id: string, next: Feature): void {
 
 function renderPanel(force = false): void {
   if (mode.kind === "extrude") return renderExtrudePanel();
+  if (mode.kind === "hole") return renderHolePanel();
+  if (toolPanel && selectedBodies().length) return renderToolPanel(toolPanel);
+  if (toolPanel) {
+    toolPanel = null;
+    force = true;
+  }
   if (selection.size === 0) {
     panel.hidden = true;
     panelKey = "";
@@ -1589,11 +1610,220 @@ function openCombine(): void {
   say(`${name} cuts ${tools.length} ${tools.length === 1 ? "body" : "bodies"} from ${features.get(target)?.name}. Change the operation in the panel.`);
 }
 
+// ---------- tools that make features: duplicate, mirror, pattern, hole ----------
+// Each makes ordinary bodies (and, for a hole, a cut), through commitAdd, so
+// holds, versions, undo and the STL treat them like anything else.
+
+function selectedBodies(): (Stored & Body)[] {
+  return [...selection].map((id) => features.get(id)).filter((f): f is Stored & Body => !!f && isBodyFeature(f));
+}
+
+function boundsOf(bodies: Body[]): THREE.Box3 {
+  const box = new THREE.Box3();
+  for (const b of bodies) {
+    const g = worldGeometry(b);
+    g.computeBoundingBox();
+    box.union(g.boundingBox!);
+    g.dispose();
+  }
+  return box;
+}
+
+function roomFor(n: number): boolean {
+  if (features.size + n <= LIMITS.featuresPerDesign) return true;
+  say(`That would make ${features.size + n} features; a design holds at most ${LIMITS.featuresPerDesign}.`, true);
+  return false;
+}
+
+// Bodies a combine uses are copied as plain bodies; say so, so nobody expects
+// the copy to carry the cut.
+function copiesNote(bodies: Stored[]): string {
+  return bodies.some((b) => usedBy(features, b.id)) ? " The copies are plain bodies: combines aren't copied." : "";
+}
+
+function makeAll(made: Body[], verb: string, from: Stored[]): void {
+  if (!roomFor(made.length)) return;
+  const changes = made.map((b) => commitAdd(b));
+  record(changes);
+  const ids = changes.filter((c): c is Change => !!c).map((c) => c.id);
+  toolPanel = null;
+  select(ids);
+  if (ids.length) say(`${verb} ${ids.length} ${ids.length === 1 ? "body" : "bodies"}.${copiesNote(from)}`);
+}
+
+function duplicate(): void {
+  const bodies = selectedBodies();
+  if (!bodies.length) return say("Select the bodies to duplicate first.", true);
+  // beside the originals, one grid step clear of them, as a group
+  const size = boundsOf(bodies).getSize(new THREE.Vector3());
+  const dx = Math.ceil((size.x + grid) / grid) * grid;
+  makeAll(
+    bodies.map((f) => ({ ...(featureOf(f) as Body), name: `${f.name} copy`, pos: [round(f.pos[0] + dx), f.pos[1], round(f.pos[2])] as Vec3 })),
+    "Duplicated",
+    bodies,
+  );
+}
+
+function applyMirror(t: Extract<ToolPanel, { kind: "mirror" }>): void {
+  if (!canEdit()) return;
+  const bodies = selectedBodies();
+  makeAll(bodies.map((f) => mirrorBody(featureOf(f) as Body, t.axis, t.at)), "Mirrored", bodies);
+}
+
+function applyPattern(t: Extract<ToolPanel, { kind: "pattern" }>): void {
+  if (!canEdit()) return;
+  const bodies = selectedBodies();
+  const count = Math.round(t.count);
+  if (count < 2 || count > 50) return say("A pattern has between 2 and 50 in its row, counting the original.", true);
+  const i = { x: 0, y: 1, z: 2 }[t.axis];
+  const made: Body[] = [];
+  for (let k = 1; k < count; k++) {
+    for (const f of bodies) {
+      const pos = [...f.pos] as Vec3;
+      pos[i] = round(pos[i] + k * t.spacing);
+      made.push({ ...(featureOf(f) as Body), name: `${f.name} ${k + 1}`, pos });
+    }
+  }
+  makeAll(made, "Patterned", bodies);
+}
+
+function openTool(kind: ToolPanel["kind"]): void {
+  const bodies = selectedBodies();
+  if (!bodies.length) return say(`Select the bodies to ${kind} first.`, true);
+  if (kind === "mirror") toolPanel = { kind, axis: "x", at: 0 };
+  else {
+    const size = boundsOf(bodies).getSize(new THREE.Vector3());
+    toolPanel = { kind, axis: "x", count: 3, spacing: Math.ceil((size.x + grid) / grid) * grid };
+  }
+  setMoving(false);
+  renderPanel(true);
+}
+
+// A hole: a cylinder drilled square into the face you click, from a
+// millimetre proud of it (so the cut opens cleanly) to the typed depth, and a
+// cut that takes it from the body. Two features, one undo step.
+function holeDrill(m: Extract<Mode, { kind: "hole" }>, hit: { point: THREE.Vector3; normal: THREE.Vector3; id: string | null }): Body | null {
+  if (!hit.id) return null;
+  const n = hit.normal.clone().normalize();
+  const at = hit.point.clone();
+  // on a flat, square-on face, snap across it to the grid
+  if (Math.max(Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)) > 0.999) {
+    for (const axis of ["x", "y", "z"] as const) if (Math.abs(n[axis]) < 0.5) at[axis] = snapValue(at[axis]);
+  }
+  const start = at.add(n.clone().multiplyScalar(1));
+  const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n.clone().negate()), "XYZ");
+  const deg = (a: number) => round(THREE.MathUtils.radToDeg(a));
+  const count = [...features.values()].filter((f) => f.kind === "combine" && f.name.startsWith("Hole")).length + 1;
+  return {
+    kind: "cylinder",
+    name: `Hole ${count} drill`,
+    pos: [round(start.x), round(start.y), round(start.z)],
+    rot: [deg(e.x), deg(e.y), deg(e.z)],
+    colour: APPEARANCES[0][1],
+    r: round(m.d / 2),
+    h: round(m.depth + 1),
+    chamfer: 0,
+  };
+}
+
+function drill(e: PointerEvent): void {
+  if (mode.kind !== "hole" || !canEdit()) return;
+  const hit = vp.pick(e);
+  if (!hit?.id) return say("Click a face of a body to drill into it.", true);
+  const holder = heldByOther(hit.id);
+  if (holder) return say(`${nameOf(holder)} is holding ${features.get(hit.id)?.name}. Drill it once they let go.`, true);
+  const cyl = holeDrill(mode, hit);
+  if (!cyl || !roomFor(2)) return;
+  const made = commitAdd(cyl);
+  if (!made) return;
+  const name = cyl.name.replace(/ drill$/, "");
+  const cut = commitAdd({ kind: "combine", name, op: "cut", target: hit.id, tools: [made.id] });
+  record([made, cut]);
+  say(`${name}: ${mode.d} mm across, ${mode.depth} mm deep, into ${features.get(hit.id)?.name}. Click again for another, Esc when done.`);
+}
+
+function renderToolPanel(t: ToolPanel): void {
+  panel.hidden = false;
+  if (panelKey === `tool:${t.kind}` && panel.contains(document.activeElement)) return;
+  panelKey = `tool:${t.kind}`;
+  const close = () => {
+    toolPanel = null;
+    renderPanel(true);
+  };
+  const choose = (label: string, options: [string, string][], value: string, onChange: (v: string) => void) => {
+    const l = document.createElement("label");
+    l.className = "wide";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const sel = document.createElement("select");
+    for (const [v, text] of options) sel.add(new Option(text, v, false, v === value));
+    sel.addEventListener("change", () => onChange(sel.value));
+    l.append(span, sel);
+    return l;
+  };
+  const names = selectedBodies().map((f) => f.name).join(", ");
+  const note = document.createElement("p");
+  note.className = "note";
+  const fields = document.createElement("div");
+  fields.className = "fields";
+  const foot = document.createElement("div");
+  foot.className = "panel-foot";
+  let title: string;
+  let axisRow: HTMLElement;
+  if (t.kind === "mirror") {
+    title = "MIRROR";
+    axisRow = choose("Across", [["x", "Left to right (X)"], ["z", "Front to back (Z)"]], t.axis, (v) => (t.axis = v as "x" | "z"));
+    fields.append(numberField("Mirror plane at", t.at, (n) => (t.at = n)));
+    note.textContent = `Makes a mirrored copy of ${names}. The originals stay.`;
+    foot.append(button("Cancel", "", close), button("Mirror", "primary", () => applyMirror(t)));
+  } else {
+    title = "PATTERN";
+    axisRow = choose("Along", [["x", "X"], ["y", "Y (up)"], ["z", "Z"]], t.axis, (v) => (t.axis = v as "x" | "y" | "z"));
+    fields.append(
+      numberField("Count", t.count, (n) => (t.count = n), "pcs"),
+      numberField("Spacing", t.spacing, (n) => (t.spacing = n)),
+    );
+    note.textContent = `A row of ${names}, the original first, each one the spacing further along.`;
+    foot.append(button("Cancel", "", close), button("Pattern", "primary", () => applyPattern(t)));
+  }
+  panel.replaceChildren(head(title, close), axisRow, fields, note, foot);
+}
+
+function renderHolePanel(): void {
+  if (mode.kind !== "hole") return;
+  const m = mode;
+  panel.hidden = false;
+  if (panelKey === "hole" && panel.contains(document.activeElement)) return;
+  panelKey = "hole";
+  const fields = document.createElement("div");
+  fields.className = "fields";
+  fields.append(
+    numberField("Diameter", m.d, (n) => {
+      if (n <= 0) return say("A hole needs a diameter bigger than zero.", true);
+      m.d = n;
+      refresh();
+    }),
+    numberField("Depth", m.depth, (n) => {
+      if (n <= 0) return say("A hole needs a depth bigger than zero.", true);
+      m.depth = n;
+      refresh();
+    }),
+  );
+  const note = document.createElement("p");
+  note.className = "note";
+  note.textContent = "Click a face of a body to drill square into it. Each hole is a cylinder and a cut, both in the timeline, so you can change them later.";
+  const foot = document.createElement("div");
+  foot.className = "panel-foot";
+  foot.append(button("Done", "primary", cancelMode));
+  panel.replaceChildren(head("HOLE", cancelMode), fields, note, foot);
+}
+
 // ---------- commands ----------
 
 function cancelMode(): void {
   endDrag(false);
   endSlide(false);
+  toolPanel = null;
   mode = { kind: "select" };
   hoverHit = null;
   panelKey = "";
@@ -1618,6 +1848,14 @@ function command(cmd: string): void {
     return refresh();
   }
   if (cmd === "combine") return openCombine();
+  if (cmd === "duplicate") return duplicate();
+  if (cmd === "mirror" || cmd === "pattern") return openTool(cmd);
+  if (cmd === "hole") {
+    select([]);
+    mode = { kind: "hole", d: 6, depth: 10 };
+    panelKey = "";
+    return refresh();
+  }
   if (cmd === "delete") return deleteSelection();
 }
 
@@ -1701,6 +1939,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key.startsWith("Arrow") || e.key === "PageUp" || e.key === "PageDown") {
     if (nudge(e.key, e.shiftKey)) return e.preventDefault();
   }
+  if (k === "d" && selection.size) return command("duplicate");
+  if (k === "h") return command("hole");
   if (k === "s") return command("sketch");
   if (k === "m") return command("move");
   if (k === "f") return vp.fit();

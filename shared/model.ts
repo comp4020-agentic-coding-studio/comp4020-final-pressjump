@@ -227,6 +227,27 @@ export function validateFeature(input: unknown): Feature | string {
 
 export const isBodyFeature = (f: Feature): f is Body => f.kind !== "combine";
 
+// A mirror image across the plane x = at (or z = at). Every primitive is
+// symmetric in its own x and z, so mirroring its placement mirrors it: the
+// position reflects, and the rotations about the other two axes flip sign.
+// An extrude's sketch is not symmetric, so its profile (across x) or its
+// direction (across z) is reflected too.
+export function mirrorBody(b: Body, axis: "x" | "z", at: number): Body {
+  const i = axis === "x" ? 0 : 2;
+  const pos = [...b.pos] as Vec3;
+  pos[i] = round(2 * at - pos[i]);
+  const [rx, ry, rz] = b.rot;
+  const rot = (axis === "x" ? [rx, -ry, -rz] : [-rx, -ry, rz]).map((a) => round(a)) as Vec3;
+  const out = { ...b, name: `${b.name} mirrored`, pos, rot } as Body;
+  if (out.kind === "extrude") {
+    if (axis === "z") out.depth = -out.depth;
+    else if (out.profile.type === "circle") out.profile = { ...out.profile, cx: -out.profile.cx };
+    else out.profile = { type: "poly", pts: out.profile.pts.map(([x, y]) => [-x, y] as [number, number]).reverse() };
+  }
+  return out;
+}
+
+
 // The combine that uses this body as a tool or target, if any.
 export function usedBy(design: Map<string, Stored>, id: string): Stored | undefined {
   for (const f of design.values()) {
