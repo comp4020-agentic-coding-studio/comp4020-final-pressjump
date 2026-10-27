@@ -794,6 +794,117 @@ function endDrag(commit: boolean): void {
   refresh();
 }
 
+// ---------- dragging a body directly ----------
+// Press on a body and drag: it slides across the floor (Alt: up and down),
+// snapping to the grid, and everyone sees it move before you let go. It goes
+// through the same hold and versioned update as any other edit. With a mouse
+// any body can be grabbed; on a touch screen only the selected one, so one
+// finger on the model still orbits.
+
+let slide: {
+  id: string;
+  original: Body;
+  plane: THREE.Plane;
+  from: THREE.Vector3;
+  vertical: boolean;
+  down: { x: number; y: number };
+  started: boolean;
+} | null = null;
+const viewportEl = $<HTMLElement>("viewport");
+
+vp.canvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || mode.kind !== "select" || !live || looking()) return;
+  if (vp.gizmo.axis) return; // on a gizmo handle: the gizmo has it
+  const hit = vp.pick(e);
+  const f = hit?.id ? features.get(hit.id) : undefined;
+  if (!hit || !f || !isBodyFeature(f) || heldByOther(f.id)) return;
+  if (e.pointerType !== "mouse" && !selection.has(f.id)) return;
+  const vertical = e.altKey;
+  let plane: THREE.Plane;
+  if (vertical) {
+    // an upright plane through the point, facing the camera
+    const n = vp.camera.position.clone().sub(hit.point).setY(0);
+    if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
+    plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n.normalize(), hit.point);
+  } else {
+    plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y);
+  }
+  slide = { id: f.id, original: featureOf(f) as Body, plane, from: hit.point.clone(), vertical, down: { x: e.clientX, y: e.clientY }, started: false };
+  vp.controls.enabled = false;
+});
+
+vp.canvas.addEventListener("pointermove", (e) => {
+  if (!slide) {
+    // say what a press would do: grab a body, or orbit
+    if (e.pointerType === "mouse" && mode.kind === "select" && !e.buttons && live && !looking()) {
+      const hit = vp.pick(e);
+      viewportEl.classList.toggle("can-grab", !!hit?.id && !heldByOther(hit.id));
+    }
+    return;
+  }
+  if (!slide.started) {
+    if (Math.hypot(e.clientX - slide.down.x, e.clientY - slide.down.y) < 4) return;
+    slide.started = true;
+    if (!selection.has(slide.id) || selection.size !== 1) select([slide.id]);
+    if (!selection.has(slide.id)) {
+      // someone else got there first; select() has said who
+      slide = null;
+      vp.controls.enabled = true;
+      return;
+    }
+    viewportEl.classList.add("grabbing");
+  }
+  const at = vp.pickPlane(e, slide.plane);
+  if (!at) return;
+  const d = at.sub(slide.from);
+  const [x, y, z] = slide.original.pos;
+  const pos: Vec3 = slide.vertical ? [x, Math.max(-LIMIT_Y, snapValue(y + d.y)), z] : [snapValue(x + d.x), y, snapValue(z + d.z)];
+  overrides.set(slide.id, { ...slide.original, pos });
+  sendCursor();
+  refresh();
+});
+
+function endSlide(commit: boolean): void {
+  if (!slide) return;
+  const { id, started } = slide;
+  slide = null;
+  vp.controls.enabled = true;
+  viewportEl.classList.remove("grabbing");
+  if (!started) return;
+  const o = overrides.get(id);
+  overrides.delete(id);
+  if (commit && o && canEdit()) record([commitUpdate(id, o)]);
+  sendCursor();
+  refresh();
+}
+
+vp.canvas.addEventListener("pointerup", () => endSlide(true));
+vp.canvas.addEventListener("pointercancel", () => endSlide(false));
+
+// Nudging with the keys: arrows move the selection one grid step across the
+// floor, the way the view is facing; Page Up and Page Down lift and lower it.
+// Shift moves ten steps.
+const LIMIT_Y = 10_000;
+function nudge(key: string, big: boolean): boolean {
+  const steps: Record<string, [number, number]> = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+  const bodies = [...selection].map((id) => features.get(id)).filter((f): f is Stored & Body => !!f && isBodyFeature(f));
+  if (!bodies.length || !(key in steps || key === "PageUp" || key === "PageDown")) return false;
+  if (!canEdit()) return true;
+  const n = grid * (big ? 10 : 1);
+  const move = new THREE.Vector3();
+  if (key === "PageUp" || key === "PageDown") move.y = key === "PageUp" ? n : -n;
+  else {
+    // the floor axis nearest the camera's right, and nearest its forward
+    const fwd = vp.controls.target.clone().sub(vp.camera.position).setY(0);
+    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    const axis = (v: THREE.Vector3) => (Math.abs(v.x) >= Math.abs(v.z) ? new THREE.Vector3(Math.sign(v.x), 0, 0) : new THREE.Vector3(0, 0, Math.sign(v.z)));
+    const [sx, sy] = steps[key];
+    move.addScaledVector(axis(right), sx * n).addScaledVector(axis(fwd), sy * n);
+  }
+  record(bodies.map((f) => commitUpdate(f.id, { ...(featureOf(f) as Body), pos: [round(f.pos[0] + move.x), round(f.pos[1] + move.y), round(f.pos[2] + move.z)] })));
+  return true;
+}
+
 // ---------- the pointer in the viewport ----------
 
 let downAt: { x: number; y: number } | null = null;
@@ -950,9 +1061,7 @@ function drawLabels(): void {
     el.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
     out.push(el);
   };
-  for (const [pid, c] of remote) {
-    if (c.at) label(nameOf(pid), colourOf(pid), new THREE.Vector3(...c.at), "name-label");
-  }
+  drawPointers();
   const tagged = new Set<string>();
   for (const s of evaluated.solids) {
     const holder = heldByOther(s.id);
@@ -977,18 +1086,68 @@ function drawLabels(): void {
 
 vp.onFrame = drawLabels;
 
-const cursorGeo = new THREE.SphereGeometry(1, 16, 12);
-function drawRemote(): void {
-  vp.remote.clear();
-  for (const [pid, c] of remote) {
-    if (!c.at) continue;
-    const p = new THREE.Vector3(...c.at);
-    const dot = new THREE.Mesh(cursorGeo, new THREE.MeshBasicMaterial({ color: colourOf(pid), depthTest: false }));
-    dot.position.copy(p);
-    dot.scale.setScalar(vp.pixels(p, 5));
-    dot.renderOrder = 10;
-    vp.remote.add(dot);
+// Other people's pointers: an arrow in their colour, with their name and,
+// while they drag or place something, what it is. Positions arrive at most
+// every 50 ms, so each pointer glides to the latest one rather than jumping.
+const pointerLayer = document.createElement("div");
+pointerLayer.className = "pointers";
+pointerLayer.setAttribute("aria-hidden", "true");
+labels.after(pointerLayer);
+const pointers = new Map<string, { el: HTMLElement; tag: HTMLElement; arrow: SVGPathElement; shown: THREE.Vector3 | null }>();
+
+function pointerFor(pid: string) {
+  let p = pointers.get(pid);
+  if (!p) {
+    const el = document.createElement("div");
+    el.className = "pointer away";
+    el.innerHTML =
+      '<svg viewBox="0 0 16 20"><path d="M1 1 L1 16 L5 12.5 L8 19 L10.6 17.8 L7.7 11.5 L13 11.5 Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><b></b>';
+    pointerLayer.append(el);
+    p = { el, tag: el.querySelector("b")!, arrow: el.querySelector("path")!, shown: null };
+    pointers.set(pid, p);
   }
+  return p;
+}
+
+function drawPointers(): void {
+  let moving = false;
+  for (const [pid, p] of pointers) {
+    if (!remote.has(pid)) {
+      p.el.remove();
+      pointers.delete(pid);
+    }
+  }
+  for (const [pid, c] of remote) {
+    const p = pointerFor(pid);
+    const colour = colourOf(pid);
+    p.arrow.setAttribute("fill", colour);
+    p.tag.style.background = colour;
+    const doing = c.draft?.[0]?.name;
+    const text = doing ? `${nameOf(pid)} · ${doing}` : nameOf(pid);
+    if (p.tag.textContent !== text) p.tag.textContent = text;
+    if (!c.at) {
+      p.el.classList.add("away");
+      continue;
+    }
+    const target = new THREE.Vector3(...c.at);
+    if (!p.shown) p.shown = target.clone();
+    else {
+      p.shown.lerp(target, 0.35);
+      if (p.shown.distanceToSquared(target) > 0.0004) moving = true;
+      else p.shown.copy(target);
+    }
+    const at = vp.project(p.shown);
+    if (!at) {
+      p.el.classList.add("away");
+      continue;
+    }
+    p.el.classList.remove("away");
+    p.el.style.transform = `translate3d(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px, 0)`;
+  }
+  if (moving) vp.schedule();
+}
+
+function drawRemote(): void {
   drawGhosts();
   vp.schedule();
 }
@@ -1434,6 +1593,7 @@ function openCombine(): void {
 
 function cancelMode(): void {
   endDrag(false);
+  endSlide(false);
   mode = { kind: "select" };
   hoverHit = null;
   panelKey = "";
@@ -1537,6 +1697,9 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Delete" || e.key === "Backspace") {
     e.preventDefault();
     return deleteSelection();
+  }
+  if (e.key.startsWith("Arrow") || e.key === "PageUp" || e.key === "PageDown") {
+    if (nudge(e.key, e.shiftKey)) return e.preventDefault();
   }
   if (k === "s") return command("sketch");
   if (k === "m") return command("move");
