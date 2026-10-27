@@ -3,34 +3,221 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bench</title>
-    <meta name="description" content="3D CAD for a few people at once: same model, same moment, a part at the end." />
+    <title>Bench · 3D CAD you build together</title>
+    <meta name="description" content="Bench is 3D CAD for a few people at once: same model, same moment, a part at the end. Free, in the browser, no sign-up." />
+    <meta name="theme-color" content="#0c66e4" />
     <link rel="icon" href="/favicon.svg" />
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/home.css" />
     <script type="module" src="/build/home.js"></script>
+    <script type="module" src="/build/hero.js"></script>
   </head>
-  <body class="doc">
-    <main class="home">
-      <header class="intro">
-        <h1>Bench</h1>
-        <p class="lede">3D CAD for a few people at once. Same model, same moment, a part at the end.</p>
-        <p>Open a design and you are modelling with everyone else who has it open: you see their cursors, what they are moving, and who has hold of what. New here? <a href="/readme/">Read what this is for</a> first; it takes two minutes.</p>
-      </header>
+  <body class="land">
+    <header class="nav">
+      <div class="wrap nav-row">
+        <a class="brand" href="/" aria-label="Bench home">
+          <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0c66e4"/><path d="M7 24 L25 8 M7 8 h6 M7 8 v6 M25 24 h-6 M25 24 v-6" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+          <span>Bench</span>
+        </a>
+        <nav class="links" aria-label="Sections">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#start">Designs</a>
+          <a href="/readme/">Why Bench</a>
+        </nav>
+        <a class="btn btn-primary btn-sm" href="#start">Start a design</a>
+      </div>
+    </header>
 
-      <section aria-labelledby="designs-h">
-        <h2 id="designs-h">Designs</h2>
-        <p id="designs-status" class="muted" role="status">Loading designs…</p>
-        <ul id="designs" class="sheets"></ul>
+    <main>
+      <!-- Hero: a CAD workspace with the pitch written on its grid -->
+      <section class="hero ws" aria-label="Bench, with a design open and four people working in it">
+        <div class="ws-body">
+          <div id="hero-3d" class="viewport3d"></div>
+          <div id="dim" class="dim" aria-hidden="true">70.000</div>
+
+          <div class="hero-copy">
+            <h1>Design the same part, <em>together</em>, at the same time.</h1>
+            <p class="lede">
+              Bench is collaborative 3D CAD for anyone: students, makers, robotics teams and the
+              friend who just needs a bracket printed. Open a link and you're modelling alongside
+              everyone else in it, with every cursor, every drag and every number in plain sight.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-primary btn-lg" href="#start">Start a design, it's free</a>
+              <a class="btn btn-ghost btn-lg" href="#start">Join an open one</a>
+            </div>
+            <ul class="ticks" aria-label="At a glance">
+              <li>Runs in the browser</li>
+              <li>Works on your phone</li>
+              <li>Exports STL</li>
+            </ul>
+          </div>
+
+          <aside class="ws-side" aria-hidden="true">
+            <svg class="viewcube" viewBox="0 0 64 64" width="64" height="64">
+              <path d="M32 6 L56 18 L32 30 L8 18 Z" class="vc-top"/>
+              <path d="M8 18 L32 30 L32 58 L8 46 Z" class="vc-left"/>
+              <path d="M56 18 L32 30 L32 58 L56 46 Z" class="vc-right"/>
+              <text x="32" y="21" text-anchor="middle">TOP</text>
+              <text x="20" y="40" text-anchor="middle">FRONT</text>
+            </svg>
+            <div class="props">
+              <div class="props-head"><span>Upright · Box</span><span id="held" class="held" data-c="red" hidden>Ana has it</span></div>
+              <label>Width <span class="field">140.000 mm</span></label>
+              <label>Height <span class="field"><span id="typed-height">70.000</span> mm</span></label>
+              <label>Depth <span class="field">10.000 mm</span></label>
+              <label>Fillet <span class="field">0.000 mm</span></label>
+            </div>
+          </aside>
+
+          <div id="toast" class="toast" aria-hidden="true"><i></i><span></span></div>
+        </div>
+
+        <div class="cursor" data-cursor data-name="Sam" data-colour="#0091a8" aria-hidden="true"><span>Sam</span></div>
+        <div class="cursor" data-cursor data-name="Ana" data-colour="#e5484d" aria-hidden="true"><span>Ana</span></div>
+        <div class="cursor" data-cursor data-name="Mia" data-colour="#8e4ec6" aria-hidden="true"><span>Mia</span></div>
+        <div class="cursor wide-only" data-cursor data-name="Leo" data-colour="#f5a524" aria-hidden="true"><span>Leo</span></div>
+        <div class="cursor wide-only" data-cursor data-name="Priya" data-colour="#3e63dd" aria-hidden="true"><span>Priya</span></div>
       </section>
 
-      <section aria-labelledby="new-h">
-        <h2 id="new-h">Start a design</h2>
-        <form id="new-design" class="new-sheet">
-          <label>Name <input name="name" required maxlength="32" autocomplete="off" placeholder="Enclosure for the Pi" /></label>
-          <button type="submit" class="primary">Start design</button>
-          <p id="new-error" class="error" role="alert"></p>
-        </form>
+      <!-- What it does: intro on the left, cards on the right -->
+      <section id="features" class="sec">
+        <div class="wrap split2">
+          <div class="intro">
+            <p class="label">What it does</p>
+            <h2>Modelling, built for more than one person.</h2>
+            <p class="intro-text">Bench is 3D CAD where everyone in the design sees the same part at the same moment, and nobody's work disappears without them seeing it.</p>
+            <a class="btn btn-primary btn-lg" href="#start">Start a design <span aria-hidden="true">→</span></a>
+            <p class="meta">Free · Browser · Phone · STL</p>
+          </div>
+          <div class="grid2">
+            <article class="tcard">
+              <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M5 3v14l4-3.5 3 6 2.4-1.1-2.8-5.8H17z"/></svg></span>
+              <h3>See everyone, live</h3>
+              <p>A name and a colour on every cursor and on whatever each person holds. Drafts show before anyone lets go.</p>
+            </article>
+            <article class="tcard">
+              <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6zM9 12l2 2 4-4"/></svg></span>
+              <h3>Nobody gets overwritten</h3>
+              <p>Every edit is checked against the version it was made on. If someone got there first, you're told who.</p>
+            </article>
+            <article class="tcard">
+              <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M3 17h18v4H3zM6 17v-4M10 17v-7M14 17v-4M18 17v-7"/></svg></span>
+              <h3>Numbers you can trust</h3>
+              <p>Millimetres and degrees to three decimals. Every dimension of every feature can be typed in.</p>
+            </article>
+            <article class="tcard">
+              <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M3 12h18M6 8v8M12 8v8M18 8v8"/></svg></span>
+              <h3>One shared timeline</h3>
+              <p>Boxes, cylinders, sketches, extrudes, joins and cuts in the order they were made. Scrub back through it.</p>
+            </article>
+            <article class="tcard">
+              <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zM11 18h2"/></svg></span>
+              <h3>Phone to desktop</h3>
+              <p>Orbit with one finger, pan and zoom with two. Every command is in reach at phone width.</p>
+            </article>
+            <article class="tcard">
+              <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg></span>
+              <h3>Straight to the printer</h3>
+              <p>The STL is built on the server from the saved design, so the file you print is the part you agreed on.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works: a bento -->
+      <section id="how" class="sec">
+        <div class="wrap">
+          <p class="label">How it works</p>
+          <h2 class="big-h">One link, one part, everyone on it at once.</h2>
+          <div class="bento">
+            <article class="tcard orbit-card">
+              <div class="orbit" aria-hidden="true">
+                <span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>
+                <span class="core"></span>
+                <span class="sat s1"><svg viewBox="0 0 24 24"><path d="M5 3v14l4-3.5 3 6 2.4-1.1-2.8-5.8H17z"/></svg></span>
+                <span class="sat s2"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg></span>
+                <span class="sat s3"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10"/></svg></span>
+                <span class="sat s4"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg></span>
+              </div>
+              <h3>Share the link, and they're in</h3>
+              <p>No accounts and no installs. Whoever opens it joins the room with their own name and colour.</p>
+            </article>
+            <article class="tcard wide-card">
+              <div class="wide-head">
+                <span class="chip-ico"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6zM9 12l2 2 4-4"/></svg></span>
+                <div>
+                  <h3>Work side by side without stepping on each other</h3>
+                  <p>A body someone holds is theirs until they let go. If your change is refused, Bench says why and who.</p>
+                </div>
+              </div>
+              <div class="stage-mock" aria-hidden="true">
+                <div class="mock-row"><b class="av av-navy">S</b><div><strong>Sam</strong> is holding <strong>Upright</strong><small>Moving it 12.000 mm up…</small></div></div>
+                <div class="mock-row faded"><b class="av">Y</b><div><strong>You</strong> tried to change <strong>Upright</strong></div></div>
+                <div class="refusal">
+                  <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 16.5v.5"/></svg>
+                  <span>Not changed: Sam is holding Upright. Try again when they let go.</span>
+                </div>
+              </div>
+            </article>
+          </div>
+          <ol class="steps3">
+            <li class="tcard"><span class="step-n">01</span><h3>Start a design</h3><p>Give it a name. That's the whole sign-up.</p></li>
+            <li class="tcard"><span class="step-n">02</span><h3>Share the link</h3><p>Send it to whoever you're building with.</p></li>
+            <li class="tcard"><span class="step-n">03</span><h3>Model and export</h3><p>Build it together, then download the STL.</p></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Designs: intro and form on the left, live list on the right -->
+      <section id="start" class="sec">
+        <div class="wrap split2">
+          <div class="intro">
+            <p class="label">Designs</p>
+            <h2 id="new-h">Start one, or jump in.</h2>
+            <p class="intro-text">Name a new design and you're in. Or open one of these; any with people in it right now says how many.</p>
+            <form id="new-design" class="new-sheet">
+              <label for="new-name">Design name</label>
+              <div class="new-row">
+                <input id="new-name" name="name" required maxlength="32" autocomplete="off" placeholder="Enclosure for the Pi" />
+                <button type="submit" class="btn btn-primary btn-lg">Start <span aria-hidden="true">→</span></button>
+              </div>
+              <p id="new-error" class="error" role="alert"></p>
+            </form>
+          </div>
+          <section class="designs" aria-labelledby="designs-h">
+            <div class="designs-head">
+              <h3 id="designs-h">Open designs</h3>
+              <span class="live-dot">Live</span>
+            </div>
+            <p id="designs-status" class="muted" role="status">Loading designs…</p>
+            <ul id="designs" class="sheets"></ul>
+          </section>
+        </div>
       </section>
     </main>
+
+    <footer class="foot">
+      <div class="wrap foot-grid">
+        <div class="foot-brand">
+          <a class="brand" href="/"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0c66e4"/><path d="M7 24 L25 8 M7 8 h6 M7 8 v6 M25 24 h-6 M25 24 v-6" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg><span>Bench</span></a>
+          <p>3D CAD for a few people at once. Same model, same moment, a part at the end.</p>
+        </div>
+        <nav aria-label="Product">
+          <p class="label">Product</p>
+          <a href="#features">What it does</a>
+          <a href="#how">How it works</a>
+          <a href="#start">Designs</a>
+        </nav>
+        <nav aria-label="Learn">
+          <p class="label">Learn</p>
+          <a href="/readme/">Why Bench</a>
+        </nav>
+      </div>
+      <div class="wrap foot-base">
+        <span>Bench · millimetres, Y up</span>
+        <a href="#start">Start a design</a>
+      </div>
+    </footer>
   </body>
 </html>
