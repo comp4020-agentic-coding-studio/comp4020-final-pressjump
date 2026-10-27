@@ -6,8 +6,9 @@
 // cutting body moves the hole: the design is parametric.
 
 import * as THREE from "three";
+import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { ADDITION, Brush, Evaluator, INTERSECTION, SUBTRACTION } from "three-bvh-csg";
 import { MeshBVH } from "three-mesh-bvh";
 import type { Body, Stored, Vec3 } from "./model.ts";
@@ -20,6 +21,39 @@ export function frame(pos: Vec3, rot: Vec3): THREE.Matrix4 {
   return new THREE.Matrix4().compose(new THREE.Vector3(...pos), q, new THREE.Vector3(1, 1, 1));
 }
 
+// A box with all twelve edges bevelled at 45 degrees by c, centred on its own
+// origin. It is the hull of its corners' triangles: at each corner, one
+// coordinate stays at the full half-size and the other two come in by c.
+function chamferedBox(w: number, h: number, d: number, c: number): THREE.BufferGeometry {
+  const [a, b, e] = [w / 2, h / 2, d / 2];
+  const pts: THREE.Vector3[] = [];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    pts.push(
+      new THREE.Vector3(sx * a, sy * (b - c), sz * (e - c)),
+      new THREE.Vector3(sx * (a - c), sy * b, sz * (e - c)),
+      new THREE.Vector3(sx * (a - c), sy * (b - c), sz * e),
+    );
+  }
+  return new ConvexGeometry(pts);
+}
+
+// A cylinder standing on its origin with both rims bevelled by c: a straight
+// side, a 45 degree ring at each end, and the two caps.
+function chamferedCylinder(r: number, h: number, c: number): THREE.BufferGeometry {
+  const ring = (top: number, bottom: number, height: number, y: number) =>
+    new THREE.CylinderGeometry(top, bottom, height, SEGMENTS, 1, true).translate(0, y, 0);
+  const parts = [
+    ring(r - c, r, c, h - c / 2),
+    ring(r, r, h - 2 * c, h / 2),
+    ring(r, r - c, c, c / 2),
+    new THREE.CircleGeometry(r - c, SEGMENTS).rotateX(-Math.PI / 2).translate(0, h, 0),
+    new THREE.CircleGeometry(r - c, SEGMENTS).rotateX(Math.PI / 2),
+  ];
+  const g = mergeGeometries(parts.map((p) => p.toNonIndexed()));
+  for (const p of parts) p.dispose();
+  return g;
+}
+
 // A body's solid in its own frame. Primitives stand on their origin, the way
 // a part sits on a bench: the origin is the middle of the base, and the body
 // grows upward (+Y), so making one taller never pushes it through what it
@@ -29,11 +63,16 @@ export function localGeometry(f: Body): THREE.BufferGeometry {
   let g: THREE.BufferGeometry;
   switch (f.kind) {
     case "box":
-      g = f.fillet > 0 ? new RoundedBoxGeometry(f.w, f.h, f.d, 4, f.fillet) : new THREE.BoxGeometry(f.w, f.h, f.d);
+      g =
+        f.chamfer > 0
+          ? chamferedBox(f.w, f.h, f.d, f.chamfer)
+          : f.fillet > 0
+            ? new RoundedBoxGeometry(f.w, f.h, f.d, 4, f.fillet)
+            : new THREE.BoxGeometry(f.w, f.h, f.d);
       g.translate(0, f.h / 2, 0);
       break;
     case "cylinder":
-      g = new THREE.CylinderGeometry(f.r, f.r, f.h, SEGMENTS).translate(0, f.h / 2, 0);
+      g = f.chamfer > 0 ? chamferedCylinder(f.r, f.h, f.chamfer) : new THREE.CylinderGeometry(f.r, f.r, f.h, SEGMENTS).translate(0, f.h / 2, 0);
       break;
     case "cone":
       g = new THREE.CylinderGeometry(f.r2, f.r1, f.h, SEGMENTS).translate(0, f.h / 2, 0);

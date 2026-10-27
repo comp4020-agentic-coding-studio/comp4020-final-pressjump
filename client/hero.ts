@@ -53,10 +53,10 @@ measure();
 let n = 0;
 const meta = (id: string) => ({ id, v: 1, by: "demo", seq: ++n });
 const box = (id: string, w: number, h: number, d: number, pos: [number, number, number], fillet = 0): Stored => ({
-  ...meta(id), kind: "box", name: id, w, h, d, fillet, pos, rot: [0, 0, 0], colour: "#c9ced6",
+  ...meta(id), kind: "box", name: id, w, h, d, fillet, chamfer: 0, pos, rot: [0, 0, 0], colour: "#c9ced6",
 });
 const cyl = (id: string, r: number, h: number, pos: [number, number, number], rot: [number, number, number] = [0, 0, 0]): Stored => ({
-  ...meta(id), kind: "cylinder", name: id, r, h, pos, rot, colour: "#c9ced6",
+  ...meta(id), kind: "cylinder", name: id, r, h, chamfer: 0, pos, rot, colour: "#c9ced6",
 });
 const combine = (id: string, op: "join" | "cut", target: string, tools: string[]): Stored => ({
   ...meta(id), kind: "combine", name: id, op, target, tools,

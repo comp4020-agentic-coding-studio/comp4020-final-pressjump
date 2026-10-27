@@ -31,10 +31,10 @@ export function id(): string {
 }
 
 export const box = (over: Partial<Body> = {}): Body =>
-  ({ kind: "box", name: "Box", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#b9bec4", w: 10, h: 20, d: 30, fillet: 0, ...over }) as Body;
+  ({ kind: "box", name: "Box", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#b9bec4", w: 10, h: 20, d: 30, fillet: 0, chamfer: 0, ...over }) as Body;
 
 export const cylinder = (over: Partial<Body> = {}): Body =>
-  ({ kind: "cylinder", name: "Cylinder", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#8a9097", r: 5, h: 10, ...over }) as Body;
+  ({ kind: "cylinder", name: "Cylinder", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#8a9097", r: 5, h: 10, chamfer: 0, ...over }) as Body;
 
 export async function newDesign(name = "spec"): Promise<Design> {
   const res = await fetch(new URL("/api/designs", baseUrl), {

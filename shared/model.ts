@@ -13,8 +13,11 @@ export type Profile =
 
 type Placed = { name: string; pos: Vec3; rot: Vec3; colour: string };
 
-export type BoxF = Placed & { kind: "box"; w: number; h: number; d: number; fillet: number };
-export type CylinderF = Placed & { kind: "cylinder"; r: number; h: number };
+// A chamfer bevels edges at 45 degrees by a typed distance: every edge of a
+// box, or both rims of a cylinder. It is a number on the body, like a box's
+// fillet, not an operation on picked edges (see CLAUDE.md, "What not to build").
+export type BoxF = Placed & { kind: "box"; w: number; h: number; d: number; fillet: number; chamfer: number };
+export type CylinderF = Placed & { kind: "cylinder"; r: number; h: number; chamfer: number };
 export type SphereF = Placed & { kind: "sphere"; r: number };
 export type ConeF = Placed & { kind: "cone"; r1: number; r2: number; h: number };
 export type TorusF = Placed & { kind: "torus"; R: number; r: number };
@@ -35,8 +38,8 @@ export type Stored = Feature & Meta;
 // The numbers each body kind carries besides its placement, with the smallest
 // value each may take. Lengths below a micron are not lengths.
 export const PARAMS = {
-  box: { w: 0.001, h: 0.001, d: 0.001, fillet: 0 },
-  cylinder: { r: 0.001, h: 0.001 },
+  box: { w: 0.001, h: 0.001, d: 0.001, fillet: 0, chamfer: 0 },
+  cylinder: { r: 0.001, h: 0.001, chamfer: 0 },
   sphere: { r: 0.001 },
   cone: { r1: 0, r2: 0, h: 0.001 },
   torus: { R: 0.001, r: 0.001 },
@@ -58,6 +61,7 @@ export const PARAM_LABELS: Record<string, string> = {
   h: "Height",
   d: "Depth",
   fillet: "Fillet",
+  chamfer: "Chamfer",
   r: "Radius",
   r1: "Bottom radius",
   r2: "Top radius",
@@ -84,6 +88,10 @@ export const MAX_TOOLS = 20;
 export const ID_PATTERN = /^[A-Za-z0-9_-]{6,40}$/;
 
 export const round = (n: number): number => Math.round(n * 1000) / 1000 + 0;
+
+// Numbers added to a kind after designs already existed. A feature stored
+// before one was added has none, and means the value given here.
+const ADDED_LATER: Record<string, number> = { chamfer: 0 };
 
 const isBody = (k: string): k is BodyKind => k in PARAMS;
 
@@ -183,13 +191,21 @@ export function validateFeature(input: unknown): Feature | string {
 
   const params: Record<string, number> = PARAMS[kind];
   for (const [key, min] of Object.entries(params)) {
-    const n = num(raw[key], PARAM_LABELS[key] ?? key, min === -Infinity ? -LIMIT : min);
+    const given = raw[key] === undefined && key in ADDED_LATER ? ADDED_LATER[key] : raw[key];
+    const n = num(given, PARAM_LABELS[key] ?? key, min === -Infinity ? -LIMIT : min);
     if (typeof n === "string") return n;
     out[key] = n;
   }
   if (kind === "box") {
     const b = out as BoxF;
     if (b.fillet * 2 >= Math.min(b.w, b.h, b.d)) return "a fillet has to be less than half the box's smallest side";
+    if (b.fillet > 0 && b.chamfer > 0) return "a box can have a fillet or a chamfer, not both";
+    if (b.chamfer * 2 >= Math.min(b.w, b.h, b.d)) return "a chamfer has to be less than half the box's smallest side";
+  }
+  if (kind === "cylinder") {
+    const c = out as CylinderF;
+    if (c.chamfer >= c.r) return "a chamfer has to be smaller than the cylinder's radius";
+    if (c.chamfer * 2 >= c.h) return "a chamfer has to be less than half the cylinder's height";
   }
   if (kind === "cone") {
     const c = out as ConeF;

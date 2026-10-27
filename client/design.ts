@@ -549,8 +549,8 @@ function drawGhosts(): void {
 // ---------- placing primitives ----------
 
 const DEFAULTS: Record<Exclude<BodyKind, "extrude">, Record<string, number>> = {
-  box: { w: 20, h: 20, d: 20, fillet: 0 },
-  cylinder: { r: 10, h: 20 },
+  box: { w: 20, h: 20, d: 20, fillet: 0, chamfer: 0 },
+  cylinder: { r: 10, h: 20, chamfer: 0 },
   sphere: { r: 10 },
   cone: { r1: 10, r2: 0, h: 20 },
   torus: { R: 15, r: 4 },
@@ -1288,7 +1288,7 @@ function renderPanel(force = false): void {
     fields.className = "fields";
     const raw = b as unknown as Record<string, number>;
     for (const k of Object.keys(PARAMS[b.kind])) {
-      fields.append(numberField(PARAM_LABELS[k], raw[k], (n) => apply(id, { ...b, [k]: n } as Body)));
+      fields.append(numberField(PARAM_LABELS[k], raw[k] ?? 0, (n) => apply(id, { ...b, [k]: n } as Body)));
     }
     if (b.kind === "extrude" && b.profile.type === "circle") {
       const prof = b.profile;

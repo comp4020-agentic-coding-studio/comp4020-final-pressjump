@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { validateFeature } from "../shared/model.ts";
+import type { Body } from "../shared/model.ts";
 import { add, baseUrl, box, cylinder, id, newDesign, readStl, stored, visit } from "./people.ts";
 
 const place = { name: "x", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#b9bec4" };
@@ -14,6 +15,11 @@ describe("features the server refuses", () => {
     ["a negative radius", { ...place, kind: "cylinder", r: -1, h: 10 }],
     ["a box with no height", { ...place, kind: "box", w: 10, h: 0, d: 10, fillet: 0 }],
     ["a fillet bigger than the box", { ...place, kind: "box", w: 10, h: 10, d: 10, fillet: 5 }],
+    ["a chamfer bigger than the box", { ...place, kind: "box", w: 10, h: 10, d: 10, fillet: 0, chamfer: 5 }],
+    ["a box with both a fillet and a chamfer", { ...place, kind: "box", w: 10, h: 10, d: 10, fillet: 1, chamfer: 1 }],
+    ["a negative chamfer", { ...place, kind: "box", w: 10, h: 10, d: 10, fillet: 0, chamfer: -1 }],
+    ["a cylinder chamfer as wide as its radius", { ...place, kind: "cylinder", r: 5, h: 20, chamfer: 5 }],
+    ["a cylinder chamfer taller than half the cylinder", { ...place, kind: "cylinder", r: 20, h: 10, chamfer: 5 }],
     ["a torus tube thicker than its ring", { ...place, kind: "torus", R: 5, r: 6 }],
     ["a sketch with no area", { ...place, kind: "extrude", depth: 5, profile: { type: "poly", pts: [[0, 0], [10, 0], [20, 0]] } }],
     ["an extrude that goes nowhere", { ...place, kind: "extrude", depth: 0, profile: { type: "circle", cx: 0, cy: 0, r: 5 } }],
@@ -88,6 +94,40 @@ describe("the STL export", () => {
     expect(s.max[1] - s.min[1]).toBeCloseTo(30, 3);
     expect(s.max[2] - s.min[2]).toBeCloseTo(20, 3);
     expect(s.min[2]).toBeCloseTo(0, 3);
+  });
+
+  it("bevels every edge of a chamfered box by exactly the chamfer", async () => {
+    const design = await newDesign("Chamfered block");
+    const a = await visit(design.id);
+    await add(a, box({ w: 20, h: 20, d: 20, chamfer: 2 } as Partial<Body>));
+    await a.close();
+    const s = await stl(design.id);
+    // Each edge loses a c x c / 2 prism, 2c^2 (W + H + D) in all. Where three
+    // edges meet, the prisms overlap (+6c^3 back, by inclusion-exclusion), and
+    // the corner is cut flat by a triangle through the three chamfer ends,
+    // taking a further c^3 / 12 pyramid at each of the 8 corners:
+    // 8000 - 2c^2 (60) + 6c^3 - 8c^3 / 12, with c = 2.
+    const c = 2;
+    expect(s.volume).toBeCloseTo(8000 - 2 * c * c * 60 + 6 * c ** 3 - (8 * c ** 3) / 12, 1);
+    expect(s.max[0] - s.min[0]).toBeCloseTo(20, 3);
+    expect(s.max[2] - s.min[2]).toBeCloseTo(20, 3);
+  });
+
+  it("bevels both rims of a chamfered cylinder", async () => {
+    const design = await newDesign("Chamfered puck");
+    const a = await visit(design.id);
+    await add(a, cylinder({ r: 10, h: 10, chamfer: 2 } as Partial<Body>));
+    await a.close();
+    // a 64-sided prism less two rings, each a 2 x 2 / 2 triangle swept round
+    // its centroid (Pappus), on the same 64 sides
+    const k = 0.5 * 64 * Math.sin((2 * Math.PI) / 64) / Math.PI;
+    const expected = k * (Math.PI * 100 * 10 - 2 * 2 * Math.PI * (10 - 2 / 3) * 2);
+    expect((await stl(design.id)).volume).toBeCloseTo(expected, 0);
+  });
+
+  it("keeps a design made before chamfers existed: a missing chamfer is none", () => {
+    const old = { ...place, kind: "box", w: 10, h: 10, d: 10, fillet: 0 };
+    expect(validateFeature(old)).toMatchObject({ chamfer: 0 });
   });
 
   it("carries a cut, and follows the cutter when it moves", async () => {
