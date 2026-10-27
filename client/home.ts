@@ -2,6 +2,8 @@
 // form to start one. The list refreshes every few seconds so a room can see
 // where everyone has gone.
 
+import { cleanName } from "../shared/protocol.ts";
+
 type Row = { id: string; name: string; updated: number; features: number; online: number };
 
 const list = document.getElementById("designs") as HTMLUListElement;
@@ -74,3 +76,47 @@ form.addEventListener("submit", async (e) => {
 
 refresh();
 setInterval(refresh, 4000);
+
+
+// The hero's launch: type your name, press Launch, and you are in a new
+// design under that name. The editor reads the name from `bench.name` when it
+// says hello to the server, so storing it here is all it takes.
+const launch = document.getElementById("launch") as HTMLFormElement;
+const launchName = document.getElementById("launch-name") as HTMLInputElement;
+const launchError = document.getElementById("launch-error") as HTMLParagraphElement;
+
+try {
+  launchName.value = localStorage.getItem("bench.name") ?? "";
+} catch {
+  // no storage: the field just starts empty
+}
+
+launch.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  launchError.textContent = "";
+  const name = cleanName(launchName.value);
+  if (!name) {
+    launchError.textContent = "Type the name people will see on your cursor.";
+    return;
+  }
+  const button = launch.querySelector("button") as HTMLButtonElement;
+  button.disabled = true;
+  try {
+    try {
+      localStorage.setItem("bench.name", name);
+    } catch {
+      // the editor will ask for a name instead
+    }
+    const res = await fetch("/api/designs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `${name}'s design` }),
+    });
+    const body = (await res.json()) as { id?: string; error?: string };
+    if (!res.ok || !body.id) throw new Error(body.error ?? "the design could not be made");
+    location.href = `/d/${body.id}`;
+  } catch (err) {
+    launchError.textContent = `Could not launch: ${err instanceof Error ? err.message : String(err)}`;
+    button.disabled = false;
+  }
+});

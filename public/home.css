@@ -56,7 +56,10 @@ h1, h2, h3 { line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
 h2 { font-size: clamp(1.7rem, 3.2vw, 2.4rem); font-weight: 700; }
 h3 { font-size: 1.15rem; font-weight: 650; }
 
-.wrap { width: min(1180px, 100% - 32px); margin-inline: auto; }
+/* the same column as the hero's: content up to 1280px, 24px gutters,
+   16px on a phone */
+.wrap { width: min(1280px, 100% - 48px); margin-inline: auto; }
+@media (max-width: 720px) { .wrap { width: calc(100% - 32px); } }
 .center { text-align: center; }
 
 .eyebrow {
@@ -173,7 +176,26 @@ h3 { font-size: 1.15rem; font-weight: 650; }
 }
 .hero h1 em.selecting::after { width: calc(var(--sel, 0%) + 4px); }
 .lede { margin: 20px 0 28px; font-size: 1.12rem; color: var(--ink-2); max-width: 34em; }
-.cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
+/* type your name, press Launch, you're in a new design */
+.launch { display: flex; gap: 8px; max-width: 520px; padding: 6px; border-radius: 14px; background: var(--surface); }
+.launch input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+}
+.launch input:focus { outline: none; }
+.launch:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+.launch .btn { flex: none; border-radius: 10px; }
+.launch-error { min-height: 0; margin: 8px 0 0; color: var(--danger); font-weight: 600; }
+.launch-error:empty { display: none; }
+.launch-alt { margin: 14px 0 0; color: var(--muted); font-size: 0.93rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ticks { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 24px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 0.93rem; }
 .ticks li::before { content: "✓"; display: inline-block; margin-right: 6px; color: var(--blue); font-weight: 800; }
 .ticks li.ticked::before { color: #3e63dd; animation: pop 0.35s ease-out; }
@@ -458,7 +480,7 @@ h3 { font-size: 1.15rem; font-weight: 650; }
   .stage-mock { padding: 14px; }
   .foot-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .foot-brand { grid-column: 1 / -1; }
-  .cta-row .btn { flex: 1 1 100%; }
+  .launch .btn { padding-inline: 16px; }
 }
 
 /* colours by name: the CSP allows no inline style attributes */
