@@ -778,15 +778,15 @@ kbd {
   height: 18px;
 }
 
+/* what to do now: bottom left, clear of the panel and the view cube */
 .banner {
   position: absolute;
-  top: 10px;
-  left: 50%;
-  translate: -50% 0;
-  max-width: calc(100% - 140px);
-  padding: 6px 12px;
-  border-radius: 4px;
-  background: #2b2d31e6;
+  bottom: 62px;
+  left: 16px;
+  max-width: max(240px, min(520px, calc(100% - 460px)));
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--text);
   color: #fff;
   font-size: 12.5px;
   font-weight: 550;
@@ -1311,6 +1311,294 @@ kbd {
 
 .viewport.grabbing > canvas {
   cursor: grabbing;
+}
+
+/* ---------- help for newcomers: the tour, tips, the empty design ---------- */
+
+.tour-ring {
+  position: fixed;
+  z-index: 60;
+  border-radius: 12px;
+  outline: 3px solid var(--blue);
+  outline-offset: 0;
+  pointer-events: none;
+  transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s;
+}
+
+.tour-ring[hidden] {
+  display: none;
+}
+
+.tour-card {
+  position: fixed;
+  z-index: 61;
+  width: min(360px, calc(100vw - 24px));
+  padding: 18px 18px 14px;
+  border-radius: 16px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--edge);
+  transition: left 0.25s, top 0.25s;
+}
+
+.tour-card.centre {
+  left: 50% !important;
+  top: 50% !important;
+  translate: -50% -50%;
+  width: min(420px, calc(100vw - 24px));
+}
+
+.tour-card.sheet {
+  left: 12px !important;
+  right: 12px;
+  top: auto !important;
+  bottom: 12px;
+  width: auto;
+  translate: none;
+}
+
+.tour-card h2 {
+  margin: 2px 0 6px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.tour-count {
+  margin: 0;
+  font: 600 11px var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--blue);
+}
+
+.tour-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.tour-wait {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
+.tour-wait:empty {
+  display: none;
+}
+
+.tour-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.app .tour-card button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.app .tour-card .tour-skip,
+.app .tour-card .tour-quiet {
+  background: var(--well);
+  color: var(--text);
+}
+
+.app .tour-card .tour-quiet {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.app .tour-card .tour-skip:hover,
+.app .tour-card .tour-quiet:hover {
+  background: var(--hover);
+}
+
+.tip-card {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  gap: 3px;
+  max-width: 260px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--text);
+  color: #dbe3ee;
+  font-size: 12.5px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.tip-card[hidden] {
+  display: none;
+}
+
+.tip-card strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.tip-card kbd,
+.keys-dialog kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #ffffff26;
+  font: 600 11px var(--mono);
+}
+
+.helpmenu {
+  position: relative;
+}
+
+.app .help-button {
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  font-weight: 800;
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.help-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
+}
+
+.help-list[hidden] {
+  display: none;
+}
+
+.app .help-list button,
+.help-list a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+  text-decoration: none;
+}
+
+.app .help-list button:hover,
+.help-list a:hover {
+  background: var(--hover);
+}
+
+.empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: min(420px, calc(100% - 32px));
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
+  text-align: center;
+}
+
+.empty[hidden] {
+  display: none;
+}
+
+.empty h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+
+.empty p {
+  margin: 0 0 16px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.empty-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.app .empty-row button {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 14px 6px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.app .empty-row button:hover {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.empty-row svg {
+  width: 34px;
+  height: 34px;
+}
+
+.app .empty-tour {
+  margin-top: 14px;
+  background: transparent;
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.keys-dialog {
+  max-width: min(30rem, calc(100vw - 32px));
+}
+
+.keys-dialog h3 {
+  margin: 4px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.keys-dialog dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+}
+
+.keys-dialog dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.keys-dialog dd {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.keys-dialog kbd {
+  background: var(--well);
+  color: var(--text);
 }
 
 /* ---------- phones ---------- */

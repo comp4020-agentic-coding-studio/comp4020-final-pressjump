@@ -26,6 +26,7 @@ import {
   type Vec3,
 } from "../shared/model.ts";
 import { LIMITS, cleanName, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
+import { installTips, seenTour, startTour, tourRunning, type Step } from "./tour.ts";
 import { Viewport, type Display } from "./viewport.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
@@ -251,6 +252,11 @@ function receive(msg: ServerMessage): void {
         rebuild();
         vp.home();
         if (!stored("bench.name")) askName();
+        if (!seenTour()) {
+          // after the name, if it is being asked for, so the two don't overlap
+          if (dialog.open) dialog.addEventListener("close", () => setTimeout(beginTour, 300), { once: true });
+          else setTimeout(beginTour, 700);
+        }
       }
       sendHold(true);
       refresh();
@@ -529,6 +535,7 @@ function refresh(): void {
     renderTimeline();
     renderPanel();
     renderBanner();
+    renderEmpty();
     syncGizmo();
     drawOverlay();
     drawRemote();
@@ -2029,6 +2036,8 @@ $<HTMLButtonElement>("browser-toggle").addEventListener("click", (e) => {
 // on a phone the browser starts folded away, so the model gets the screen
 if (matchMedia("(max-width: 760px)").matches) setBrowser(false);
 
+installTips();
+
 nameInput.addEventListener("change", () => {
   const name = cleanName(nameInput.value);
   if (name && live) send({ t: "rename", name });
@@ -2090,6 +2099,107 @@ document.addEventListener("keydown", (e) => {
     return renderPanel(true);
   }
 });
+
+// ---------- help for people new to it ----------
+
+const emptyCard = $<HTMLElement>("empty");
+function renderEmpty(): void {
+  emptyCard.hidden = !started || features.size > 0 || marker !== null || mode.kind !== "select";
+}
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-start]")) {
+  b.addEventListener("click", () => command(b.dataset.start ?? ""));
+}
+
+const helpButton = $<HTMLButtonElement>("help-button");
+const helpList = $<HTMLElement>("help-list");
+function setHelp(open: boolean): void {
+  helpList.hidden = !open;
+  helpButton.setAttribute("aria-expanded", String(open));
+}
+helpButton.addEventListener("click", () => setHelp(helpList.hidden === true));
+document.addEventListener("pointerdown", (e) => {
+  if (!helpList.hidden && !(e.target as Element).closest(".helpmenu")) setHelp(false);
+});
+$<HTMLButtonElement>("tour-again").addEventListener("click", () => {
+  setHelp(false);
+  beginTour();
+});
+$<HTMLButtonElement>("show-keys").addEventListener("click", () => {
+  setHelp(false);
+  $<HTMLDialogElement>("keys-dialog").showModal();
+});
+$<HTMLButtonElement>("empty-tour").addEventListener("click", beginTour);
+
+// The tour. Steps that ask you to do something wait until you have, by
+// watching the editor's own state; you can always skip on.
+function beginTour(): void {
+  if (tourRunning()) return;
+  cancelMode();
+  const touch = matchMedia("(pointer: coarse)").matches;
+  const q = (sel: string) => () => document.querySelector(sel);
+  const mine = () => [...features.values()].filter((f) => f.by === me?.id && isBodyFeature(f));
+  let placedBefore = 0;
+  let watching: { id: string; v: number } | null = null;
+  const steps: Step[] = [
+    {
+      target: () => null,
+      title: "Welcome to Bench",
+      body: "Bench is 3D CAD you share: everyone with this link sees the same part, live. This tour takes about a minute and shows you the basics. You can leave it at any time.",
+    },
+    {
+      target: q('[data-cmd="place:box"]'),
+      title: "Add a shape",
+      body: "Parts start from simple shapes. Click Box.",
+      done: () => mode.kind === "place",
+    },
+    {
+      target: q("#viewport"),
+      title: "Put it down",
+      body: "Now click anywhere on the grid. The faint blue box shows where it will go.",
+      enter: () => (placedBefore = mine().length),
+      done: () => mine().length > placedBefore,
+    },
+    {
+      target: q("#viewport"),
+      title: "Move it",
+      body: `Drag one of the coloured arrows: red moves it along X, green up along Y, blue along Z. When you let go, type a number to move it exactly that far. ${touch ? "You can also drag the selected body with your finger." : "You can also drag the body itself across the floor."}`,
+      enter: () => {
+        const f = mine().sort((a, b) => b.seq - a.seq)[0];
+        watching = f ? { id: f.id, v: f.v } : null;
+        if (f && !selection.has(f.id)) select([f.id]);
+      },
+      done: () => !!watching && (features.get(watching.id)?.v ?? 0) > watching.v,
+    },
+    {
+      target: () => (panel.hidden ? null : panel),
+      title: "Every number can be typed",
+      body: "The panel shows the selected body's sizes and position, in millimetres. Type a new width or height and press Enter. Chamfer bevels the edges.",
+    },
+    {
+      target: () => document.querySelector('[data-cmd="duplicate"]')?.closest(".group") ?? null,
+      title: "Make more from what you have",
+      body: "Duplicate, Mirror and Pattern make copies. Hole drills a round hole into a face. Combine joins bodies into one, or cuts one out of another. Hover any button to see what it does.",
+    },
+    {
+      target: q("#viewport"),
+      title: "Look around",
+      body: touch
+        ? "One finger on empty space turns the view; two fingers pan and zoom. The cube in the corner jumps to front, top and side views."
+        : "Drag empty space to turn the view, right-drag to pan, scroll to zoom. The cube in the corner jumps to front, top and side views. F fits the whole part.",
+    },
+    {
+      target: q(".people"),
+      title: "Working together",
+      body: "Everyone in this design shows here. Their pointers, and anything they're holding, appear in their colour. Click someone to follow their view. Nobody can change a body you're holding.",
+    },
+    {
+      target: q(".timeline"),
+      title: "Undo, history and printing",
+      body: "Every step is kept in order along the bottom; step back through it to see how the part was made. Undo takes back your own changes. STL in the ribbon downloads the part for a 3D printer. The ? up top brings this tour back.",
+    },
+  ];
+  startTour(steps, () => say("That's the tour. The ? at the top has it again, and the keys."));
+}
 
 // ---------- people ----------
 
