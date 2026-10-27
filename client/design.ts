@@ -470,7 +470,11 @@ function select(ids: Iterable<string>): void {
     }
     selection.add(id);
   }
-  if (!selection.size) setMoving(false);
+  hideReadout();
+  // one body selected: its arrows come up, ready to drag
+  const one = selection.size === 1 ? features.get([...selection][0]) : undefined;
+  if (one && isBodyFeature(one) && mode.kind === "select") setMoving(true);
+  else if (!selection.size) setMoving(false);
   sendHold();
   refresh();
 }
@@ -548,6 +552,9 @@ function drawGhosts(): void {
       if (isBodyFeature(f)) items.push({ geometry: worldGeometry(f), colour: colourOf(pid), opacity: 0.2 });
     }
   }
+  // while a body is being moved, a faint copy stays where it started
+  const moved = dragging ?? (slide?.started ? slide : null);
+  if (moved) items.push({ geometry: worldGeometry(moved.original), colour: "#626f86", opacity: 0.12 });
   const preview = previewBody();
   if (preview) items.push({ geometry: worldGeometry(preview.body), colour: preview.cut ? "#d6312b" : "#0c66e4", opacity: 0.3 });
   vp.setGhosts(items);
@@ -788,6 +795,15 @@ vp.gizmo.addEventListener("objectChange", () => {
     pos: [round(vp.proxy.position.x), round(vp.proxy.position.y), round(vp.proxy.position.z)],
     rot: [deg(r.x), deg(r.y), deg(r.z)],
   });
+  const axis = ({ X: 0, Y: 1, Z: 2 } as Record<string, 0 | 1 | 2>)[vp.gizmo.axis ?? ""] as 0 | 1 | 2 | undefined;
+  if (gizmoMode === "translate" && axis !== undefined) {
+    showReadout({ id: dragging.id, kind: "move", axis, base: dragging.original }, round(vp.proxy.position.getComponent(axis) - dragging.original.pos[axis]), true);
+  } else if (gizmoMode === "rotate" && axis !== undefined) {
+    const angle = (vp.gizmo as unknown as { rotationAngle: number }).rotationAngle;
+    showReadout({ id: dragging.id, kind: "turn", axis, base: dragging.original }, round(THREE.MathUtils.radToDeg(angle)), true);
+  } else {
+    showReadout(null, 0, true, "Rotate freely");
+  }
   sendCursor();
   refresh();
 });
@@ -801,8 +817,106 @@ function endDrag(commit: boolean): void {
   dragging = null;
   overrides.delete(id);
   if (commit && o) record([commitUpdate(id, o)]);
+  // the readout stays, now a box to type the exact amount into
+  if (commit && o && typed) showReadout(typed, readoutAmount, false);
+  else hideReadout();
   sendCursor();
   refresh();
+}
+
+// ---------- the readout: how far, and a box to type how far ----------
+// While you drag an arrow or a ring it says which axis and how far, in mm or
+// degrees. When you let go it stays, as a box: type the exact amount (or just
+// start typing digits) and press Enter, and the body goes exactly that far
+// from where it started.
+
+type Typed = { id: string; kind: "move" | "turn"; axis: 0 | 1 | 2; base: Body };
+let typed: Typed | null = null;
+let readoutAmount = 0;
+const readout = document.createElement("div");
+readout.className = "readout";
+readout.hidden = true;
+readout.innerHTML =
+  '<span class="readout-axis"></span><span class="readout-label"></span><span class="input-unit"><input type="number" step="any" inputmode="decimal"><span class="readout-unit"></span></span><span class="readout-text"></span>';
+$<HTMLElement>("viewport").append(readout);
+const readoutAxis = readout.querySelector<HTMLElement>(".readout-axis")!;
+const readoutLabel = readout.querySelector<HTMLElement>(".readout-label")!;
+const readoutBox = readout.querySelector<HTMLElement>(".input-unit")!;
+const readoutInput = readout.querySelector<HTMLInputElement>("input")!;
+const readoutUnit = readout.querySelector<HTMLElement>(".readout-unit")!;
+const readoutText = readout.querySelector<HTMLElement>(".readout-text")!;
+
+function showReadout(t: Typed | null, amount: number, live: boolean, text = ""): void {
+  typed = t;
+  readoutAmount = amount;
+  readout.hidden = false;
+  readout.classList.toggle("live", live);
+  readoutAxis.hidden = !t;
+  readoutBox.hidden = !t;
+  readoutText.textContent = text;
+  if (t) {
+    const name = "XYZ"[t.axis];
+    readoutAxis.textContent = name;
+    readoutAxis.dataset.axis = name;
+    readoutLabel.textContent = t.kind === "move" ? "Move" : "Rotate";
+    readoutUnit.textContent = t.kind === "move" ? "mm" : "°";
+    readoutInput.setAttribute("aria-label", `${t.kind === "move" ? "Distance to move along" : "Angle to rotate about"} ${name}, in ${t.kind === "move" ? "millimetres" : "degrees"}`);
+    if (document.activeElement !== readoutInput) readoutInput.value = String(amount);
+    readoutInput.readOnly = live;
+  } else readoutLabel.textContent = "";
+  vp.schedule();
+}
+
+function hideReadout(): void {
+  typed = null;
+  readout.hidden = true;
+}
+
+// the body as it would be, `amount` along (or about) the readout's axis from
+// where the drag began
+function typedBody(t: Typed, amount: number): Body {
+  if (t.kind === "move") {
+    const pos = [...t.base.pos] as Vec3;
+    pos[t.axis] = round(pos[t.axis] + amount);
+    return { ...t.base, pos };
+  }
+  const axis = new THREE.Vector3().setComponent(t.axis, 1);
+  const start = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(t.base.rot.map((a) => THREE.MathUtils.degToRad(a)) as Vec3), "XYZ"));
+  const q = new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(amount)).multiply(start);
+  const e = new THREE.Euler().setFromQuaternion(q, "XYZ");
+  return { ...t.base, rot: [e.x, e.y, e.z].map((a) => round(THREE.MathUtils.radToDeg(a))) as Vec3 };
+}
+
+readoutInput.addEventListener("change", () => {
+  const t = typed;
+  const n = Number(readoutInput.value);
+  if (!t || readoutInput.readOnly) return;
+  if (readoutInput.value.trim() === "" || !Number.isFinite(n)) {
+    readoutInput.value = String(readoutAmount);
+    return say("That needs to be a number.", true);
+  }
+  if (!canEdit()) return;
+  if (heldByOther(t.id)) return say(`${nameOf(heldByOther(t.id)!)} is holding ${features.get(t.id)?.name} now.`, true);
+  record([commitUpdate(t.id, typedBody(t, n))]);
+  readoutAmount = n;
+});
+readoutInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") readoutInput.blur();
+  if (e.key === "Escape") {
+    readoutInput.value = String(readoutAmount);
+    readoutInput.blur();
+  }
+});
+
+// follows the body round the screen, beside its arrows
+function placeReadout(): void {
+  if (readout.hidden) return;
+  const id = typed?.id ?? dragging?.id ?? slide?.id;
+  const f = id ? (overrides.get(id) ?? features.get(id)) : undefined;
+  if (!f || !isBodyFeature(f as Feature)) return hideReadout();
+  const at = vp.project(new THREE.Vector3(...(f as Body).pos));
+  if (!at) return;
+  readout.style.transform = `translate(${Math.round(at.x + 28)}px, ${Math.round(at.y + 24)}px)`;
 }
 
 // ---------- dragging a body directly ----------
@@ -871,6 +985,9 @@ vp.canvas.addEventListener("pointermove", (e) => {
   const [x, y, z] = slide.original.pos;
   const pos: Vec3 = slide.vertical ? [x, Math.max(-LIMIT_Y, snapValue(y + d.y)), z] : [snapValue(x + d.x), y, snapValue(z + d.z)];
   overrides.set(slide.id, { ...slide.original, pos });
+  const mm = (n: number) => `${n > 0 ? "+" : ""}${round(n)}`;
+  const [ox, oy, oz] = slide.original.pos;
+  showReadout(null, 0, true, slide.vertical ? `Y ${mm(pos[1] - oy)} mm` : `X ${mm(pos[0] - ox)}  Z ${mm(pos[2] - oz)} mm`);
   sendCursor();
   refresh();
 });
@@ -882,6 +999,7 @@ function endSlide(commit: boolean): void {
   vp.controls.enabled = true;
   viewportEl.classList.remove("grabbing");
   if (!started) return;
+  hideReadout();
   const o = overrides.get(id);
   overrides.delete(id);
   if (commit && o && canEdit()) record([commitUpdate(id, o)]);
@@ -1097,7 +1215,10 @@ function drawLabels(): void {
   labels.replaceChildren(...out);
 }
 
-vp.onFrame = drawLabels;
+vp.onFrame = () => {
+  drawLabels();
+  placeReadout();
+};
 
 // Other people's pointers: an arrow in their colour, with their name and,
 // while they drag or place something, what it is. Positions arrive at most
@@ -1304,6 +1425,12 @@ function renderBanner(): void {
   else if (mode.kind === "measure") text = "Click two points to measure between them. Esc to stop.";
   else if (mode.kind === "sketch" && mode.stage === "plane") text = "Click a face, or the ground, to sketch on. Esc to stop.";
   else if (mode.kind === "hole") text = "Click a face of a body to drill a hole into it. Esc when done.";
+  else if (moving && movable() && !dragging && readout.hidden) {
+    text =
+      gizmoMode === "translate"
+        ? "Drag an arrow to move along X, Y or Z, or drag the body itself. Then type a number to make it exact. E for rotate."
+        : "Drag a ring to turn the body. Then type a number for an exact angle. W for move.";
+  }
   banner.hidden = !text;
   banner.textContent = text;
   document.body.classList.toggle("sketching", mode.kind === "sketch" && mode.stage === "draw");
@@ -1821,6 +1948,7 @@ function renderHolePanel(): void {
 // ---------- commands ----------
 
 function cancelMode(): void {
+  hideReadout();
   endDrag(false);
   endSlide(false);
   toolPanel = null;
@@ -1923,6 +2051,13 @@ document.addEventListener("keydown", (e) => {
     return replay(redoStack, undoStack, false);
   }
   if (mod) return;
+  if (!readout.hidden && typed && !readoutInput.readOnly && /^[0-9.-]$/.test(e.key)) {
+    e.preventDefault();
+    readoutInput.value = e.key;
+    readoutInput.focus();
+    return;
+  }
+  if (e.key === "Escape" && !readout.hidden) return hideReadout();
   if (e.key === "Escape") {
     if (mode.kind !== "select") return cancelMode();
     if (moving) return setMoving(false);

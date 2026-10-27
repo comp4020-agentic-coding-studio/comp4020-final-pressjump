@@ -1238,6 +1238,72 @@ kbd {
   white-space: nowrap;
 }
 
+/* the move readout: which axis, how far, and a box to type how far */
+.readout {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 8px;
+  border-radius: 12px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
+  font-weight: 600;
+  will-change: transform;
+}
+
+.readout[hidden] {
+  display: none;
+}
+
+.readout-axis {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.readout-axis[hidden] {
+  display: none;
+}
+
+.readout-axis[data-axis="X"] { background: #e5484d; }
+.readout-axis[data-axis="Y"] { background: #30a46c; }
+.readout-axis[data-axis="Z"] { background: #0c66e4; }
+
+.readout .input-unit {
+  width: 112px;
+}
+
+.readout .input-unit[hidden] {
+  display: none;
+}
+
+.app .readout input {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.readout.live .input-unit {
+  outline: 2px solid var(--blue);
+}
+
+.readout-text {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.readout-text:empty {
+  display: none;
+}
+
 /* the viewport says what a press will do */
 .viewport.can-grab > canvas {
   cursor: grab;

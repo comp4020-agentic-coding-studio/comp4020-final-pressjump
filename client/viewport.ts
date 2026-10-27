@@ -74,6 +74,9 @@ export class Viewport {
     this.gizmo = new TransformControls(this.camera, this.canvas);
     this.gizmo.setSize(0.9);
     this.gizmo.setRotationSnap(THREE.MathUtils.degToRad(15));
+    // one arrow (or ring) per axis, red X, green Y, blue Z: every move is
+    // along one axis, so its amount is one number you can read and type
+    this.gizmo.showXY = this.gizmo.showYZ = this.gizmo.showXZ = this.gizmo.showXYZE = false;
     this.gizmo.addEventListener("dragging-changed", (e) => {
       this.controls.enabled = !e.value;
     });
