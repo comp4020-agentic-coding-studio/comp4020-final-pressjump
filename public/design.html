@@ -46,26 +46,6 @@
       <symbol id="i-last" viewBox="0 0 24 24"><path d="M18 5 V19 M5 5 L15 12 L5 19 Z" fill="#44546f" stroke="#44546f" stroke-width="1.5"/></symbol>
     </svg>
 
-    <header class="appbar">
-      <a class="logo" href="/" aria-label="Bench, all designs"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0c66e4"/><path d="M7 24 L25 8 M7 8 h6 M7 8 v6 M25 24 h-6 M25 24 v-6" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg></a>
-      <div class="doc-tab">
-        <svg class="ico" aria-hidden="true"><use href="#i-doc"/></svg>
-        <input id="design-name" aria-label="Design name" maxlength="32" autocomplete="off" />
-      </div>
-      <a class="help" href="/readme/">About</a>
-      <div class="helpmenu">
-        <button type="button" id="help-button" class="help-button" aria-haspopup="true" aria-expanded="false" aria-controls="help-list" aria-label="Help">?</button>
-        <div id="help-list" class="help-list" hidden>
-          <button type="button" id="tour-again">Take the tour</button>
-          <button type="button" id="show-keys">Keys and mouse</button>
-          <a href="/readme/" target="_blank" rel="noopener">What Bench is for</a>
-        </div>
-      </div>
-      <div class="people">
-        <ul id="people" aria-label="People in this design"></ul>
-        <button type="button" id="me" class="me" aria-label="Change your name"></button>
-      </div>
-    </header>
 
     <nav class="ribbon" aria-label="Commands">
       <div class="tabs" role="presentation">
@@ -109,6 +89,20 @@
             <button type="button" class="cmd" id="redo" data-tip="Redo|Put back what you undid.|Ctrl Y" aria-label="Redo"><svg aria-hidden="true"><use href="#i-redo"/></svg><span>Redo</span></button>
           </div>
           <span class="glabel" id="g-file">FILE</span>
+        </div>
+      </div>
+      <div class="ribbon-side">
+        <div class="helpmenu">
+          <button type="button" id="help-button" class="help-button" aria-haspopup="true" aria-expanded="false" aria-controls="help-list" aria-label="Help">?</button>
+          <div id="help-list" class="help-list" hidden>
+            <button type="button" id="tour-again">Take the tour</button>
+            <button type="button" id="show-keys">Keys and mouse</button>
+            <a href="/readme/" target="_blank" rel="noopener">What Bench is for</a>
+          </div>
+        </div>
+        <div class="people">
+          <ul id="people" aria-label="People in this design"></ul>
+          <button type="button" id="me" class="me" aria-label="Change your name"></button>
         </div>
       </div>
       <div class="groups" id="groups-sketch" hidden>

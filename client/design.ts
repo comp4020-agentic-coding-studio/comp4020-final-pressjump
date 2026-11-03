@@ -37,7 +37,6 @@ const banner = $<HTMLElement>("banner");
 const offline = $<HTMLElement>("offline");
 const connLabel = $<HTMLElement>("conn");
 const message = $<HTMLElement>("message");
-const nameInput = $<HTMLInputElement>("design-name");
 const peopleList = $<HTMLUListElement>("people");
 const meButton = $<HTMLButtonElement>("me");
 const tree = $<HTMLElement>("tree");
@@ -348,7 +347,6 @@ function receive(msg: ServerMessage): void {
 
 function showDesign(): void {
   if (!design) return;
-  if (document.activeElement !== nameInput) nameInput.value = design.name;
   document.title = `${design.name} · Bench`;
   $<HTMLAnchorElement>("export").href = `/d/${design.id}/export.stl`;
 }
@@ -1667,7 +1665,7 @@ function renderPanel(force = false): void {
     t1.setAttribute("aria-pressed", String(moving && gizmoMode === "translate"));
     t2.setAttribute("aria-pressed", String(moving && gizmoMode === "rotate"));
     moveRow.append(t1, t2);
-    body.push(section("Size"), fields, section("Position"), pos, section("Rotation"), rot, moveRow, section("Appearance"), swatches);
+    body.push(section("Size"), fields, section("Position · mm"), pos, section("Rotation · degrees"), rot, moveRow, section("Appearance"), swatches);
     if (evaluated.consumed.has(id)) {
       const n = document.createElement("p");
       n.className = "note";
@@ -2038,14 +2036,6 @@ if (matchMedia("(max-width: 760px)").matches) setBrowser(false);
 
 installTips();
 
-nameInput.addEventListener("change", () => {
-  const name = cleanName(nameInput.value);
-  if (name && live) send({ t: "rename", name });
-  else if (design) nameInput.value = design.name;
-});
-nameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") nameInput.blur();
-});
 
 document.addEventListener("keydown", (e) => {
   if ((e.target as Element).closest?.("input, select, textarea, dialog")) return;
