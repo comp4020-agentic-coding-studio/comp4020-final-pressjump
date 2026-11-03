@@ -6,9 +6,10 @@
 // model is a file that ships with Bench, served like a script or a font.
 
 import { describe, expect, it } from "vitest";
-import { EXAMPLE_ID } from "../shared/example.ts";
+import { EXAMPLE_ID, exampleFeatures } from "../shared/example.ts";
+import { checkReferences, validateFeature, type Feature, type Stored } from "../shared/model.ts";
 import { LIMITS } from "../shared/protocol.ts";
-import { baseUrl, id, newDesign, stored, visit } from "./people.ts";
+import { baseUrl, id, newDesign, readStl, stored, visit } from "./people.ts";
 
 // a model-sized payload: a few thousand triangles of numbers
 const bulk = () => Array.from({ length: 30_000 }, (_, i) => i * 1.5);
@@ -39,6 +40,32 @@ describe("models are never kept by the server", () => {
         expect(res.status, `${method} ${path}`).toBeGreaterThanOrEqual(400);
       }
     }
+  });
+});
+
+describe("the example turbine", () => {
+  it("is made only of features the server would accept, using the editor's tools", () => {
+    const made = new Map<string, Stored>();
+    for (const [i, { id, f }] of exampleFeatures().entries()) {
+      const v = validateFeature(f);
+      expect(v, f.name).not.toBeTypeOf("string");
+      expect(checkReferences(made, v as Feature), f.name).toBeNull();
+      made.set(id, { ...(v as Feature), id, v: 1, by: "x", seq: i + 1 } as Stored);
+    }
+    const names = new Set([...made.values()].map((f) => f.name));
+    for (const n of ["Bolt", "Nut", "Washer", "Standoff", "Plate", "Tube", "Gusset", "Countersunk hole", "Counterbored hole", "Socket screw", "Slot", "Shaft", "Gear", "Bracket", "Blade"]) {
+      expect(names, n).toContain(n);
+    }
+  });
+
+  it("is there to open, and exports a part", async () => {
+    expect((await fetch(new URL(`/d/${EXAMPLE_ID}`, baseUrl))).status).toBe(200);
+    const { features } = (await (await fetch(new URL(`/api/designs/${EXAMPLE_ID}`, baseUrl))).json()) as { features: Stored[] };
+    expect(features.length).toBeGreaterThan(50);
+    const stl = readStl(await (await fetch(new URL(`/d/${EXAMPLE_ID}/export.stl`, baseUrl))).arrayBuffer());
+    expect(stl.triangles).toBeGreaterThan(1000);
+    // the turbine stands about 300 mm tall: Z up in the STL
+    expect(stl.max[2] - stl.min[2]).toBeGreaterThan(250);
   });
 });
 

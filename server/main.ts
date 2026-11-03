@@ -8,7 +8,8 @@ import { extname, join, normalize, sep } from "node:path";
 import { marked } from "marked";
 import { WebSocketServer } from "ws";
 import { LIMITS, cleanName, type Design } from "../shared/protocol.ts";
-import { EXAMPLE_ID, EXAMPLE_NAME } from "../shared/example.ts";
+import { EXAMPLE_ID, EXAMPLE_NAME, exampleFeatures } from "../shared/example.ts";
+import { checkReferences, validateFeature, type Stored } from "../shared/model.ts";
 import * as db from "./db.ts";
 import { toStl } from "./export.ts";
 import { onlineCounts, roomFor } from "./room.ts";
@@ -48,9 +49,25 @@ if (db.listDesigns().length === 0) {
   db.addDesign({ id: newId(), name: "Workshop" });
 }
 
-// The example design, at /d/example: made if it is missing, so there is
-// always one place to try the wind preview.
+// The example design, at /d/example: a wind turbine made of ordinary
+// features (shared/example.ts). Made whenever the design is missing or has
+// been emptied, through the same checks as any edit, before anyone can open it.
 if (!db.getDesign(EXAMPLE_ID)) db.addDesign({ id: EXAMPLE_ID, name: EXAMPLE_NAME });
+if (db.loadFeatures(EXAMPLE_ID).length === 0) {
+  const made = new Map<string, Stored>();
+  const author = "bench-example";
+  db.putPerson(author, "Bench example");
+  db.renameDesign(EXAMPLE_ID, EXAMPLE_NAME);
+  for (const [i, { id, f }] of exampleFeatures().entries()) {
+    const v = validateFeature(f);
+    const problem = typeof v === "string" ? v : checkReferences(made, v);
+    if (typeof v === "string" || problem) throw new Error(`the example's ${f.name} is not a valid feature: ${problem ?? v}`);
+    const stored = { ...v, id, v: 1, by: author, seq: i + 1 } as Stored;
+    db.putFeature(EXAMPLE_ID, stored);
+    made.set(id, stored);
+  }
+}
+
 function newId(): string {
   return randomBytes(8).toString("base64url").replace(/[-_]/g, "x").slice(0, 10);
 }

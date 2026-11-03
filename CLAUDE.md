@@ -112,6 +112,10 @@ note, never fakes: threads, involute gear teeth.
   so `build/step-worker.js` alone is served with `'unsafe-eval'
   'wasm-unsafe-eval'`. Every page keeps the strict policy; `spec/models`
   checks both.
+- **The example is made with Bench's own tools.** `/d/example` is a wind
+  turbine built from the same recipes as the ribbon (`shared/example.ts`),
+  written by the server, through the usual checks, whenever that design is
+  empty. It is the one design the wind preview starts on in.
 - **`/readme/` renders `README.md` on the server**, so the headings are in the
   HTML before any script runs.
 - **Works at phone width.** 390 px, no horizontal page scroll, every command

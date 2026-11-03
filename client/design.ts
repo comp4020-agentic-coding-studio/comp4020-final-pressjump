@@ -317,6 +317,14 @@ function receive(msg: ServerMessage): void {
         vp.home();
         setWind(windOn);
         loadLocalModels();
+        // the example is watched the way a wind tunnel is: from the side, with
+        // the air streaming past left to right
+        if (designId === EXAMPLE_ID) {
+          setTimeout(() => {
+            vp.lookFrom(new THREE.Vector3(0.45, 0.3, 1));
+            setTimeout(() => vp.fit(), 400);
+          }, 700);
+        }
         if (!stored("bench.name")) askName();
         if (!seenTour()) {
           // after the name, if it is being asked for, so the two don't overlap
