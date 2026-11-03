@@ -29,6 +29,8 @@ const TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".ico": "image/x-icon",
   ".md": "text/plain; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".stl": "model/stl",
 };
 
 // Everything the pages load comes from this server; the CSP says so, so a
@@ -70,24 +72,48 @@ function file(res: ServerResponse, base: string, rel: string): boolean {
   } catch {
     return false;
   }
-  send(res, 200, TYPES[extname(path)] ?? "application/octet-stream", readFileSync(path));
+  send(res, 200, TYPES[extname(path)] ?? "application/octet-stream", readFileSync(path), WORKER_POLICY[rel] ?? {});
   return true;
 }
+
+// The STEP reader is OpenCascade compiled to WebAssembly, and its loader
+// builds functions from strings. A worker runs under the policy sent with its
+// own script, so only that worker gets eval and WebAssembly: it has no page
+// to reach, loads only from here, and sees only the file someone chose.
+// Every page keeps the strict policy above.
+const WORKER_POLICY: Record<string, Record<string, string>> = {
+  "build/step-worker.js": {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self'",
+  },
+};
 
 function notFound(res: ServerResponse): void {
   const page = readFileSync(join(PUBLIC, "404.html"), "utf8");
   send(res, 404, TYPES[".html"], page);
 }
 
+class TooLarge extends Error {}
+
+// A request body, read up to the message limit and no further: nothing the
+// server takes is anywhere near the size of a model.
 async function body(req: IncomingMessage): Promise<unknown> {
+  const declared = Number(req.headers["content-length"] ?? 0);
+  if (declared > LIMITS.messageBytes) throw new TooLarge();
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > LIMITS.messageBytes) throw new Error("too large");
+    if (size > LIMITS.messageBytes) throw new TooLarge();
     chunks.push(chunk as Buffer);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+// Too big: say so, then hang up, so the rest of the upload is never read and
+// the connection is not left half full for the next request.
+function tooLarge(req: IncomingMessage, res: ServerResponse): void {
+  res.on("finish", () => req.destroy());
+  send(res, 413, "application/json; charset=utf-8", JSON.stringify({ error: `requests are limited to ${LIMITS.messageBytes / 1024} KB; models stay in your browser and are never uploaded` }), { Connection: "close" });
 }
 
 function slug(name: string): string {
@@ -126,7 +152,8 @@ const server = createServer(async (req, res) => {
       let input: { name?: unknown };
       try {
         input = (await body(req)) as typeof input;
-      } catch {
+      } catch (err) {
+        if (err instanceof TooLarge) return tooLarge(req, res);
         return json(res, 400, { error: "send a JSON object" });
       }
       const name = cleanName(input.name);

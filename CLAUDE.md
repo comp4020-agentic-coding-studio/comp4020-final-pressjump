@@ -97,6 +97,17 @@ kind of feature the server has to trust.
 - **Bounded everything.** Messages 32 KB, 400 features per design, 20 drafts
   per cursor message, 120 messages per connection per second. A limit hit is
   answered with a refusal, not a crash.
+- **Models never go to the server.** An imported file (STEP, OBJ, PLY, 3MF;
+  STL is not offered for import) is opened in the browser and kept in its IndexedDB; the server has no
+  route that takes a file, and a body over the limit is answered 413 and the
+  connection closed. So an import is visible only to whoever imported it and
+  the STL export leaves it out, and the editor says both. Never "fix" that by
+  storing or relaying models: one large upload would sink a 256 MB machine.
+- **One narrow script exception.** The STEP reader (occt-import-js, LGPL,
+  copied unmodified into `public/build/` at build) builds code from strings,
+  so `build/step-worker.js` alone is served with `'unsafe-eval'
+  'wasm-unsafe-eval'`. Every page keeps the strict policy; `spec/models`
+  checks both.
 - **`/readme/` renders `README.md` on the server**, so the headings are in the
   HTML before any script runs.
 - **Works at phone width.** 390 px, no horizontal page scroll, every command

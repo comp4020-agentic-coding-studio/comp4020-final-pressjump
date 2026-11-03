@@ -11,6 +11,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY client ./client
 COPY shared ./shared
+COPY scripts ./scripts
 RUN pnpm build
 
 FROM docker.io/library/node:24.21.0-alpine

@@ -30,6 +30,7 @@ import { installTips, seenTour, startTour, tourRunning, type Step } from "./tour
 import { Viewport, type Display } from "./viewport.ts";
 import { PRESSURE_KEY, SPEED_KEY, Wind, type WindDir } from "./wind.ts";
 import { EXAMPLE_ID } from "../shared/example.ts";
+import { ACCEPT, forgetImport, loadImports, placedGeometry, readModel, saveImport, standOnFloor, type Imported, type Unit } from "./importer.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
 const $ = <T extends Element>(id: string): T => document.getElementById(id) as unknown as T;
@@ -309,6 +310,7 @@ function receive(msg: ServerMessage): void {
         rebuild();
         vp.home();
         setWind(windOn);
+        loadLocalModels();
         if (!stored("bench.name")) askName();
         if (!seenTour()) {
           // after the name, if it is being asked for, so the two don't overlap
@@ -524,6 +526,7 @@ function sendHold(force = false): void {
 
 function select(ids: Iterable<string>): void {
   selection.clear();
+  importSel = null;
   for (const id of ids) {
     if (!features.has(id)) continue;
     const holder = heldByOther(id);
@@ -573,7 +576,7 @@ function current(): Stored[] {
 
 function rebuild(): void {
   evaluated = evaluate(current(), marker ?? Infinity);
-  wind.setSolids(evaluated.solids.filter((s) => !hidden.has(s.id)).map((s) => s.geometry));
+  wind.setSolids([...evaluated.solids.filter((s) => !hidden.has(s.id)).map((s) => s.geometry), ...[...importGeo.values()]]);
   vp.setSolids(
     evaluated.solids,
     (id) => ({ selected: selection.has(id), holder: heldByOther(id), hidden: hidden.has(id) }),
@@ -827,6 +830,17 @@ function movable(): Stored & Body | null {
 }
 
 function syncGizmo(): void {
+  const m = importSel ? imported.get(importSel) : undefined;
+  if (m) {
+    if (draggingImport) return;
+    vp.proxy.position.set(...m.pos);
+    vp.proxy.rotation.set(...(m.rot.map((a) => THREE.MathUtils.degToRad(a)) as Vec3), "XYZ");
+    vp.gizmo.setMode(gizmoMode);
+    vp.gizmo.setTranslationSnap(grid);
+    vp.gizmo.attach(vp.proxy);
+    vp.schedule();
+    return;
+  }
   const f = movable();
   if (!moving || !f || looking() || !live) {
     vp.gizmo.detach();
@@ -845,14 +859,37 @@ function syncGizmo(): void {
 
 let dragging: { id: string; original: Body } | null = null;
 
+// an imported model being dragged by its arrows: local, so no hold, no version
+let draggingImport: string | null = null;
 vp.gizmo.addEventListener("mouseDown", () => {
+  if (importSel) draggingImport = importSel;
+});
+vp.gizmo.addEventListener("objectChange", () => {
+  const m = draggingImport ? imported.get(draggingImport) : undefined;
+  if (!m) return;
+  const deg = (a: number): number => round(THREE.MathUtils.radToDeg(a));
+  m.pos = [round(vp.proxy.position.x), round(vp.proxy.position.y), round(vp.proxy.position.z)];
+  m.rot = [deg(vp.proxy.rotation.x), deg(vp.proxy.rotation.y), deg(vp.proxy.rotation.z)];
+  placeImport(m);
+});
+vp.gizmo.addEventListener("mouseUp", () => {
+  const m = draggingImport ? imported.get(draggingImport) : undefined;
+  draggingImport = null;
+  if (m) {
+    saveImport(m);
+    renderPanel(true);
+  }
+});
+
+vp.gizmo.addEventListener("mouseDown", () => {
+  if (importSel) return;
   const f = movable();
   if (!f || !canEdit()) return;
   dragging = { id: f.id, original: featureOf(f) as Body };
 });
 
 vp.gizmo.addEventListener("objectChange", () => {
-  if (!dragging) return;
+  if (!dragging || draggingImport) return;
   const r = vp.proxy.rotation;
   const deg = (a: number): number => round(THREE.MathUtils.radToDeg(a));
   overrides.set(dragging.id, {
@@ -1120,6 +1157,7 @@ function click(e: PointerEvent): void {
   switch (mode.kind) {
     case "select": {
       const hit = vp.pick(e);
+      if (hit?.id?.startsWith("import:")) return selectImport(hit.id.slice(7));
       const id = hit?.id ?? null;
       if (!id) {
         if (!e.shiftKey && !e.ctrlKey && !e.metaKey) select([]);
@@ -1404,6 +1442,30 @@ function renderTree(): void {
   }
   bodiesNode.append(bodiesSummary, list);
   doc.append(docSummary, bodiesNode);
+  if (imported.size) {
+    const node = document.createElement("details");
+    node.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = `Imported, only you (${imported.size})`;
+    const ul = document.createElement("ul");
+    for (const m of imported.values()) {
+      const li = document.createElement("li");
+      li.className = "row imported";
+      if (importSel === m.id) li.classList.add("selected");
+      const name = document.createElement("button");
+      name.type = "button";
+      name.className = "name";
+      name.innerHTML = `<svg class="ico" aria-hidden="true"><use href="#i-import"/></svg>`;
+      const text = document.createElement("span");
+      text.textContent = m.name;
+      name.append(text);
+      name.addEventListener("click", () => selectImport(m.id));
+      li.append(name);
+      ul.append(li);
+    }
+    node.append(summary, ul);
+    doc.append(node);
+  }
   tree.replaceChildren(doc);
 }
 
@@ -1586,6 +1648,7 @@ function apply(id: string, next: Feature): void {
 function renderPanel(force = false): void {
   if (mode.kind === "extrude") return renderExtrudePanel();
   if (mode.kind === "hole") return renderHolePanel();
+  if (importSel && imported.has(importSel)) return renderImportPanel(imported.get(importSel)!, force);
   if (toolPanel && selectedBodies().length) return renderToolPanel(toolPanel);
   if (toolPanel) {
     toolPanel = null;
@@ -2010,6 +2073,186 @@ function renderHolePanel(): void {
   panel.replaceChildren(head("HOLE", cancelMode), fields, note, foot);
 }
 
+// ---------- imported models: in this browser only ----------
+// Opened and kept in the browser (importer.ts says why): drawn, moved and
+// blown on by the wind here, never sent, never in the STL.
+
+const imported = new Map<string, Imported>();
+const importGeo = new Map<string, THREE.BufferGeometry>();
+const importMesh = new Map<string, THREE.Mesh>();
+let importSel: string | null = null;
+const importMat = () => new THREE.MeshStandardMaterial({ color: 0xa88a5c, metalness: 0.45, roughness: 0.45 });
+
+function placeImport(m: Imported): void {
+  importGeo.get(m.id)?.dispose();
+  const g = placedGeometry(m);
+  importGeo.set(m.id, g);
+  let mesh = importMesh.get(m.id);
+  if (!mesh) {
+    mesh = new THREE.Mesh(g, importMat());
+    mesh.userData.id = `import:${m.id}`;
+    importMesh.set(m.id, mesh);
+    vp.bodies.add(mesh);
+  }
+  mesh.geometry = g;
+  (mesh.material as THREE.MeshStandardMaterial).emissive.set(importSel === m.id ? 0x0c66e4 : 0x000000);
+  (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = importSel === m.id ? 0.35 : 0;
+  refresh();
+}
+
+function addImport(m: Imported): void {
+  imported.set(m.id, m);
+  placeImport(m);
+  saveImport(m);
+}
+
+function removeImport(id: string): void {
+  const mesh = importMesh.get(id);
+  if (mesh) {
+    vp.bodies.remove(mesh);
+    (mesh.material as THREE.Material).dispose();
+  }
+  importGeo.get(id)?.dispose();
+  importMesh.delete(id);
+  importGeo.delete(id);
+  imported.delete(id);
+  forgetImport(id);
+  if (importSel === id) importSel = null;
+  setMoving(false);
+  refresh();
+}
+
+function selectImport(id: string): void {
+  select([]);
+  importSel = id;
+  for (const m of imported.values()) placeImport(m);
+  setMoving(true);
+  panelKey = "";
+  refresh();
+}
+
+async function importFile(file: File): Promise<void> {
+  say(`Opening ${file.name}…`);
+  try {
+    const read = await readModel(file);
+    const m: Imported = { id: newId(), design: designId, name: file.name, ...read, pos: [0, 0, 0], rot: [0, 0, 0], keep: true };
+    m.pos = standOnFloor(m);
+    addImport(m);
+    selectImport(m.id);
+    vp.fit();
+    say(`Opened ${file.name}, ${(read.positions.length / 9).toLocaleString()} triangles. Only you can see it: it stays in this browser and isn't uploaded.`);
+  } catch (err) {
+    say(`Couldn't open ${file.name}: ${err instanceof Error ? err.message : String(err)}.`, true);
+  }
+}
+
+// models kept from earlier visits, in this browser
+async function loadLocalModels(): Promise<void> {
+  for (const m of await loadImports(designId)) {
+    imported.set(m.id, m);
+    placeImport(m);
+  }
+}
+
+function renderImportPanel(m: Imported, force: boolean): void {
+  panel.hidden = false;
+  const key = `import:${m.id}:${m.unit}:${m.zUp}:${m.pos}:${m.rot}`;
+  if (!force && key === panelKey) return;
+  if (!force && panel.contains(document.activeElement) && panelKey.startsWith(`import:${m.id}`)) return;
+  panelKey = key;
+  const close = () => {
+    importSel = null;
+    setMoving(false);
+    for (const x of imported.values()) placeImport(x);
+  };
+  const g = importGeo.get(m.id)!;
+  g.computeBoundingBox();
+  const size = g.boundingBox!.getSize(new THREE.Vector3());
+  const choose = (label: string, options: [string, string][], value: string, onChange: (v: string) => void) => {
+    const l = document.createElement("label");
+    l.className = "wide";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const sel = document.createElement("select");
+    for (const [v, t] of options) sel.add(new Option(t, v, false, v === value));
+    sel.addEventListener("change", () => onChange(sel.value));
+    l.append(span, sel);
+    return l;
+  };
+  const update = (next: Partial<Imported>) => {
+    Object.assign(m, next);
+    placeImport(m);
+    saveImport(m);
+    renderPanel(true);
+  };
+  const sizeNote = document.createElement("p");
+  sizeNote.className = "note";
+  sizeNote.textContent = `${round(size.x)} × ${round(size.y)} × ${round(size.z)} mm, ${(m.positions.length / 9).toLocaleString()} triangles.`;
+  const units = choose("File units", [["mm", "Millimetres"], ["cm", "Centimetres"], ["m", "Metres"], ["in", "Inches"]], m.unit, (v) => update({ unit: v as Unit }));
+  const up = choose("Up in the file", [["z", "Z is up"], ["y", "Y is up"]], m.zUp ? "z" : "y", (v) => update({ zUp: v === "z" }));
+  const section = (t: string) => {
+    const h = document.createElement("h3");
+    h.textContent = t;
+    return h;
+  };
+  const row = (vals: Vec3, unit: string, set: (v: Vec3) => void) => {
+    const div = document.createElement("div");
+    div.className = "fields three";
+    ["X", "Y", "Z"].forEach((axis, i) =>
+      div.append(
+        numberField(axis, vals[i], (n) => {
+          const next = [...vals] as Vec3;
+          next[i] = round(n);
+          set(next);
+        }, unit),
+      ),
+    );
+    return div;
+  };
+  const note = document.createElement("p");
+  note.className = "note";
+  note.textContent = "Only in your browser: it isn't uploaded, nobody else in this design sees it, and the STL export leaves it out.";
+  const foot = document.createElement("div");
+  foot.className = "panel-foot";
+  foot.append(
+    button("Remove", "danger", () => removeImport(m.id)),
+    button("Stand on floor", "", () => update({ pos: [m.pos[0], standOnFloor(m)[1], m.pos[2]] })),
+    button("OK", "primary", close),
+  );
+  panel.replaceChildren(
+    head("IMPORTED MODEL", close),
+    sizeNote,
+    units,
+    up,
+    section("Position · mm"),
+    row(m.pos, "mm", (pos) => update({ pos })),
+    section("Rotation · degrees"),
+    row(m.rot, "°", (rot) => update({ rot })),
+    note,
+    foot,
+  );
+}
+
+const importInput = document.createElement("input");
+importInput.type = "file";
+importInput.accept = ACCEPT;
+importInput.hidden = true;
+document.body.append(importInput);
+importInput.addEventListener("change", () => {
+  const f = importInput.files?.[0];
+  importInput.value = "";
+  if (f) importFile(f);
+});
+viewportEl.addEventListener("dragover", (e) => {
+  if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+});
+viewportEl.addEventListener("drop", (e) => {
+  const f = e.dataTransfer?.files[0];
+  if (!f) return;
+  e.preventDefault();
+  importFile(f);
+});
+
 // ---------- commands ----------
 
 function cancelMode(): void {
@@ -2041,6 +2284,7 @@ function command(cmd: string): void {
     return refresh();
   }
   if (cmd === "combine") return openCombine();
+  if (cmd === "import") return importInput.click();
   if (cmd === "duplicate") return duplicate();
   if (cmd === "mirror" || cmd === "pattern") return openTool(cmd);
   if (cmd === "hole") {
@@ -2154,7 +2398,7 @@ document.addEventListener("keydown", (e) => {
 
 const emptyCard = $<HTMLElement>("empty");
 function renderEmpty(): void {
-  emptyCard.hidden = !started || features.size > 0 || marker !== null || mode.kind !== "select";
+  emptyCard.hidden = !started || features.size > 0 || imported.size > 0 || marker !== null || mode.kind !== "select";
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>("[data-start]")) {
   b.addEventListener("click", () => command(b.dataset.start ?? ""));
