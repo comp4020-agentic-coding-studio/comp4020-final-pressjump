@@ -14,7 +14,12 @@ import { MeshBVH } from "three-mesh-bvh";
 import type { Body, Stored, Vec3 } from "./model.ts";
 
 const DEG = Math.PI / 180;
-const SEGMENTS = 64;
+// How many sides a circle of radius r is drawn with: enough that a big one
+// looks round, few enough that a small hole does not cost a 64-sided cut.
+// Always even, 24 to 64. The spec's volume checks use this same rule.
+export function segments(r: number): number {
+  return Math.min(64, Math.max(24, Math.round(r * 3) * 2));
+}
 
 export function frame(pos: Vec3, rot: Vec3): THREE.Matrix4 {
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0] * DEG, rot[1] * DEG, rot[2] * DEG, "XYZ"));
@@ -41,13 +46,13 @@ function chamferedBox(w: number, h: number, d: number, c: number): THREE.BufferG
 // side, a 45 degree ring at each end, and the two caps.
 function chamferedCylinder(r: number, h: number, c: number): THREE.BufferGeometry {
   const ring = (top: number, bottom: number, height: number, y: number) =>
-    new THREE.CylinderGeometry(top, bottom, height, SEGMENTS, 1, true).translate(0, y, 0);
+    new THREE.CylinderGeometry(top, bottom, height, segments(r), 1, true).translate(0, y, 0);
   const parts = [
     ring(r - c, r, c, h - c / 2),
     ring(r, r, h - 2 * c, h / 2),
     ring(r, r - c, c, c / 2),
-    new THREE.CircleGeometry(r - c, SEGMENTS).rotateX(-Math.PI / 2).translate(0, h, 0),
-    new THREE.CircleGeometry(r - c, SEGMENTS).rotateX(Math.PI / 2),
+    new THREE.CircleGeometry(r - c, segments(r)).rotateX(-Math.PI / 2).translate(0, h, 0),
+    new THREE.CircleGeometry(r - c, segments(r)).rotateX(Math.PI / 2),
   ];
   const g = mergeGeometries(parts.map((p) => p.toNonIndexed()));
   for (const p of parts) p.dispose();
@@ -72,16 +77,16 @@ export function localGeometry(f: Body): THREE.BufferGeometry {
       g.translate(0, f.h / 2, 0);
       break;
     case "cylinder":
-      g = f.chamfer > 0 ? chamferedCylinder(f.r, f.h, f.chamfer) : new THREE.CylinderGeometry(f.r, f.r, f.h, SEGMENTS).translate(0, f.h / 2, 0);
+      g = f.chamfer > 0 ? chamferedCylinder(f.r, f.h, f.chamfer) : new THREE.CylinderGeometry(f.r, f.r, f.h, segments(f.r)).translate(0, f.h / 2, 0);
       break;
     case "cone":
-      g = new THREE.CylinderGeometry(f.r2, f.r1, f.h, SEGMENTS).translate(0, f.h / 2, 0);
+      g = new THREE.CylinderGeometry(f.r2, f.r1, f.h, segments(Math.max(f.r1, f.r2))).translate(0, f.h / 2, 0);
       break;
     case "sphere":
-      g = new THREE.SphereGeometry(f.r, SEGMENTS, SEGMENTS / 2).translate(0, f.r, 0);
+      g = new THREE.SphereGeometry(f.r, segments(f.r), segments(f.r) / 2).translate(0, f.r, 0);
       break;
     case "torus":
-      g = new THREE.TorusGeometry(f.R, f.r, 24, SEGMENTS).rotateX(-Math.PI / 2).translate(0, f.r, 0);
+      g = new THREE.TorusGeometry(f.R, f.r, 24, segments(f.R)).rotateX(-Math.PI / 2).translate(0, f.r, 0);
       break;
     case "extrude": {
       const shape = new THREE.Shape();
@@ -93,7 +98,7 @@ export function localGeometry(f: Body): THREE.BufferGeometry {
         for (const [x, y] of rest) shape.lineTo(x, y);
         shape.closePath();
       }
-      g = new THREE.ExtrudeGeometry(shape, { depth: Math.abs(f.depth), bevelEnabled: false, curveSegments: SEGMENTS });
+      g = new THREE.ExtrudeGeometry(shape, { depth: Math.abs(f.depth), bevelEnabled: false, curveSegments: f.profile.type === "circle" ? segments(f.profile.r) : 64 });
       if (f.depth < 0) g.translate(0, 0, f.depth);
       break;
     }
@@ -168,6 +173,21 @@ evaluator.attributes = ["position", "uv", "normal"];
 
 const OPS = { join: ADDITION, cut: SUBTRACTION, intersect: INTERSECTION } as const;
 
+// A combine's result depends only on its operation and the exact solids that
+// go in, so it is remembered by those: re-evaluating after an edit redoes
+// only the combines downstream of what changed, not every cut in the design.
+// Solids are told apart by identity (built bodies are cached by their
+// numbers, results by this), and the memory is bounded.
+const solidIds = new WeakMap<THREE.BufferGeometry, number>();
+let nextSolid = 1;
+const solidId = (g: THREE.BufferGeometry): number => {
+  let n = solidIds.get(g);
+  if (!n) solidIds.set(g, (n = nextSolid++));
+  return n;
+};
+const combined = new Map<string, THREE.BufferGeometry>();
+const COMBINED_MAX = 150;
+
 // `upto` stops the timeline after that sequence number, for looking back.
 export function evaluate(features: Stored[], upto = Infinity): Evaluated {
   const ordered = [...features].sort((a, b) => a.seq - b.seq).filter((f) => f.seq <= upto);
@@ -188,6 +208,19 @@ export function evaluate(features: Stored[], upto = Infinity): Evaluated {
       failed.set(f.id, "a body it uses is missing at this point in the timeline");
       continue;
     }
+    const key = `${f.op}:${solidId(target)}:${tools.map((t) => solidId(t!)).join(",")}`;
+    const known = combined.get(key);
+    if (known) {
+      // used again: keep it among the most recent
+      combined.delete(key);
+      combined.set(key, known);
+      geometry.set(f.target, known);
+      for (const t of f.tools) {
+        geometry.delete(t);
+        consumed.set(t, f.id);
+      }
+      continue;
+    }
     try {
       let result = new Brush(target);
       result.updateMatrixWorld();
@@ -197,6 +230,8 @@ export function evaluate(features: Stored[], upto = Infinity): Evaluated {
         result = evaluator.evaluate(result, tool, OPS[f.op]);
       }
       const merged = result.geometry;
+      combined.set(key, merged);
+      if (combined.size > COMBINED_MAX) combined.delete(combined.keys().next().value!);
       geometry.set(f.target, merged);
       for (const t of f.tools) {
         geometry.delete(t);

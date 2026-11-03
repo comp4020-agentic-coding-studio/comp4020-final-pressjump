@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { PARTS, faceFrame, placeSteps } from "../shared/parts.ts";
-import { evaluate } from "../shared/evaluate.ts";
+import { evaluate, segments } from "../shared/evaluate.ts";
 import { checkReferences, validateFeature, type Feature, type Stored } from "../shared/model.ts";
 
 // a recipe placed on a tilted face and made into stored features
@@ -60,7 +60,8 @@ describe("every ready-made part", () => {
 describe("they come out the size they say", () => {
   it("an M6 washer is a 12 mm ring with a 6.4 mm hole, 1.6 mm thick", () => {
     const [solid] = evaluate(make("washer", { d1: 6.4, d2: 12, h: 1.6 })).solids;
-    const ring = (r: number) => 0.5 * 64 * r * r * Math.sin((2 * Math.PI) / 64); // the 64-sided circle
+    // each circle as drawn: a polygon of segments(r) sides
+    const ring = (r: number) => 0.5 * segments(r) * r * r * Math.sin((2 * Math.PI) / segments(r));
     expect(volume(solid.geometry)).toBeCloseTo((ring(6) - ring(3.2)) * 1.6, 1);
   });
 

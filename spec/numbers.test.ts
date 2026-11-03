@@ -4,6 +4,7 @@
 // spec measures its volume and size.
 
 import { describe, expect, it } from "vitest";
+import { segments } from "../shared/evaluate.ts";
 import { validateFeature } from "../shared/model.ts";
 import type { Body } from "../shared/model.ts";
 import { add, baseUrl, box, cylinder, id, newDesign, readStl, stored, visit } from "./people.ts";
@@ -118,9 +119,10 @@ describe("the STL export", () => {
     const a = await visit(design.id);
     await add(a, cylinder({ r: 10, h: 10, chamfer: 2 } as Partial<Body>));
     await a.close();
-    // a 64-sided prism less two rings, each a 2 x 2 / 2 triangle swept round
-    // its centroid (Pappus), on the same 64 sides
-    const k = 0.5 * 64 * Math.sin((2 * Math.PI) / 64) / Math.PI;
+    // a prism of segments(10) sides less two rings, each a 2 x 2 / 2 triangle
+    // swept round its centroid (Pappus), on the same sides
+    const n = segments(10);
+    const k = 0.5 * n * Math.sin((2 * Math.PI) / n) / Math.PI;
     const expected = k * (Math.PI * 100 * 10 - 2 * 2 * Math.PI * (10 - 2 / 3) * 2);
     expect((await stl(design.id)).volume).toBeCloseTo(expected, 0);
   });
@@ -137,8 +139,8 @@ describe("the STL export", () => {
     const plate = (await stored(design.id))[0];
     const drill = await add(a, cylinder({ r: 5, h: 20, pos: [0, -5, 0] }));
     await add(a, { kind: "combine", name: "Hole", op: "cut", target: plate.id, tools: [drill.id] });
-    // a 64-sided hole of radius 5 through 10 mm
-    const hole = 0.5 * 64 * 25 * Math.sin((2 * Math.PI) / 64) * 10;
+    // a hole of radius 5, drawn with segments(5) sides, through 10 mm
+    const hole = 0.5 * segments(5) * 25 * Math.sin((2 * Math.PI) / segments(5)) * 10;
     expect((await stl(design.id)).volume).toBeCloseTo(16000 - hole, 0);
 
     // move the drill clear of the plate: the hole goes with it
