@@ -8,6 +8,7 @@ import { extname, join, normalize, sep } from "node:path";
 import { marked } from "marked";
 import { WebSocketServer } from "ws";
 import { LIMITS, cleanName, type Design } from "../shared/protocol.ts";
+import { EXAMPLE_ID, EXAMPLE_NAME } from "../shared/example.ts";
 import * as db from "./db.ts";
 import { toStl } from "./export.ts";
 import { onlineCounts, roomFor } from "./room.ts";
@@ -45,6 +46,9 @@ if (db.listDesigns().length === 0) {
   db.addDesign({ id: newId(), name: "Workshop" });
 }
 
+// The example design, at /d/example: made if it is missing, so there is
+// always one place to try the wind preview.
+if (!db.getDesign(EXAMPLE_ID)) db.addDesign({ id: EXAMPLE_ID, name: EXAMPLE_NAME });
 function newId(): string {
   return randomBytes(8).toString("base64url").replace(/[-_]/g, "x").slice(0, 10);
 }

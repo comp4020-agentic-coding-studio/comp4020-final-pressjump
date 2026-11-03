@@ -28,6 +28,8 @@ import {
 import { LIMITS, cleanName, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
 import { installTips, seenTour, startTour, tourRunning, type Step } from "./tour.ts";
 import { Viewport, type Display } from "./viewport.ts";
+import { PRESSURE_KEY, SPEED_KEY, Wind, type WindDir } from "./wind.ts";
+import { EXAMPLE_ID } from "../shared/example.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
 const $ = <T extends Element>(id: string): T => document.getElementById(id) as unknown as T;
@@ -50,6 +52,62 @@ const gridSelect = $<HTMLSelectElement>("grid");
 const displaySelect = $<HTMLSelectElement>("display");
 
 const vp = new Viewport($("viewport"), $("cube"), labels);
+
+// The wind preview starts on only in the example design, where it shows off
+// what the editor does; everyone's own designs open with it off, and turning
+// it on there lasts for that visit. A view choice: kept here, never sent.
+const wind = new Wind(vp.scene, () => vp.schedule(), new THREE.Color("#f4f6fa"), matchMedia("(max-width: 760px)").matches);
+const windButton = $<HTMLButtonElement>("wind");
+const windDir = $<HTMLSelectElement>("wind-dir");
+const windNote = $<HTMLElement>("wind-note");
+let windOn = designId === EXAMPLE_ID;
+windDir.value = stored("bench.windDir") ?? "+x";
+if (!windDir.value) windDir.value = "+x";
+// the key: what the colours mean, in stepped swatches, and what the wind is not
+function keyRow(label: string, low: string, colours: string[], high: string): HTMLElement {
+  const row = document.createElement("span");
+  row.className = "wind-key";
+  const name = document.createElement("b");
+  name.textContent = label;
+  const lo = document.createElement("span");
+  lo.textContent = low;
+  const steps = document.createElement("span");
+  steps.className = "wind-steps";
+  for (const c of colours) {
+    const i = document.createElement("i");
+    i.style.background = c;
+    steps.append(i);
+  }
+  const hi = document.createElement("span");
+  hi.textContent = high;
+  row.append(name, lo, steps, hi);
+  return row;
+}
+wind.onGrid = (mm) => {
+  windNote.hidden = !windOn || mm === null;
+  if (mm === null) return;
+  const what = document.createElement("span");
+  what.className = "wind-what";
+  what.textContent = `Wind preview: a coarse air-flow simulation in ${Math.round(mm)} mm cells. It shows where air goes, not forces or numbers; the colours are relative.`;
+  windNote.replaceChildren(
+    keyRow("Air speed", "slow", SPEED_KEY, "fast"),
+    keyRow("On the part", "pulled", PRESSURE_KEY, "pushed"),
+    what,
+  );
+};
+function setWind(on: boolean): void {
+  windOn = on;
+  windButton.setAttribute("aria-pressed", String(on));
+  windDir.disabled = !on;
+  if (!on) windNote.hidden = true;
+  wind.setDirection(windDir.value as WindDir);
+  wind.setOn(on);
+}
+windButton.addEventListener("click", () => setWind(!windOn));
+windDir.addEventListener("change", () => {
+  store("bench.windDir", windDir.value);
+  wind.setDirection(windDir.value as WindDir);
+});
 
 // ---------- who you are ----------
 // A random token in this browser is the whole of identity: a second browser is
@@ -250,6 +308,7 @@ function receive(msg: ServerMessage): void {
         started = true;
         rebuild();
         vp.home();
+        setWind(windOn);
         if (!stored("bench.name")) askName();
         if (!seenTour()) {
           // after the name, if it is being asked for, so the two don't overlap
@@ -514,6 +573,7 @@ function current(): Stored[] {
 
 function rebuild(): void {
   evaluated = evaluate(current(), marker ?? Infinity);
+  wind.setSolids(evaluated.solids.filter((s) => !hidden.has(s.id)).map((s) => s.geometry));
   vp.setSolids(
     evaluated.solids,
     (id) => ({ selected: selection.has(id), holder: heldByOther(id), hidden: hidden.has(id) }),

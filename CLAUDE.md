@@ -48,6 +48,10 @@ over unchanged; everything below that names 3D is new with that rebuild.
      off and the page says so. Edits are never queued offline.
    - Hiding a body is a view choice, kept in the browser and never sent.
      Nobody can make a part disappear for someone else.
+   - The wind preview is a view choice too: kept in the browser, never sent,
+     never changes the design. It is a coarse, uncalibrated simulation, so it
+     shows where air goes and never a force, a drag figure or any number
+     about the air; its note in the view says so.
 
 3. **You can see the other people.**
    - Every connected person has a name and a colour, shown on their 3D
