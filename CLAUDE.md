@@ -79,9 +79,13 @@ need one, stop and say so instead of building it.
 
 A chamfer is therefore a typed number on a box (every edge) or a cylinder
 (both rims), like a box's fillet, never an operation on picked edges. Tools
-that make things (Duplicate, Mirror, Pattern, Hole) only ever write ordinary
-bodies and combines through the usual versioned edits; none of them is a new
-kind of feature the server has to trust.
+that make things (Duplicate, Mirror, Pattern, Circular, Grid, Hole, and the
+ready-made parts in `client/parts.ts`: fasteners, gears, brackets,
+countersinks and the rest) only ever write ordinary bodies and combines
+through the usual versioned edits; none of them is a new kind of feature the
+server has to trust. What a recipe cannot model honestly it says in its
+note, never fakes: threads, involute gear teeth.
+
 ## Rules for the platform
 
 - **Node 24 runs the TypeScript directly.** Only erasable syntax: no `enum`,

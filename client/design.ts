@@ -27,6 +27,7 @@ import {
 } from "../shared/model.ts";
 import { LIMITS, cleanName, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
 import { installTips, seenTour, startTour, tourRunning, type Step } from "./tour.ts";
+import { PARTS, TURN, faceFrame, placeSteps, type PartDef, type Step as PartStep } from "../shared/parts.ts";
 import { Viewport, type Display } from "./viewport.ts";
 import { PRESSURE_KEY, SPEED_KEY, Wind, type WindDir } from "./wind.ts";
 import { EXAMPLE_ID } from "../shared/example.ts";
@@ -180,11 +181,16 @@ type Mode =
   | { kind: "sketch"; stage: "plane" }
   | { kind: "sketch"; stage: "draw"; plane: SketchPlane; tool: SketchTool; pts: [number, number][]; cursor: [number, number] | null }
   | { kind: "extrude"; plane: SketchPlane; profile: Profile; depth: number; op: "new" | "join" | "cut"; name: string }
-  | { kind: "hole"; d: number; depth: number };
+  | { kind: "hole"; d: number; depth: number }
+  | { kind: "part"; def: PartDef; v: Record<string, number> };
 
 // Mirror and Pattern work on the selection, from a small panel of typed
 // numbers; null when neither is open.
-type ToolPanel = { kind: "mirror"; axis: "x" | "z"; at: number } | { kind: "pattern"; axis: "x" | "y" | "z"; count: number; spacing: number };
+type ToolPanel =
+  | { kind: "mirror"; axis: "x" | "z"; at: number }
+  | { kind: "pattern"; axis: "x" | "y" | "z"; count: number; spacing: number }
+  | { kind: "circular"; count: number; angle: number; cx: number; cz: number }
+  | { kind: "grid"; nx: number; nz: number; sx: number; sz: number };
 let toolPanel: ToolPanel | null = null;
 
 type SketchTool = "line" | "rect" | "circle";
@@ -623,6 +629,7 @@ function drawGhosts(): void {
   // while a body is being moved, a faint copy stays where it started
   const moved = dragging ?? (slide?.started ? slide : null);
   if (moved) items.push({ geometry: worldGeometry(moved.original), colour: "#626f86", opacity: 0.12 });
+  for (const g of partPreview()) items.push(g);
   const preview = previewBody();
   if (preview) items.push({ geometry: worldGeometry(preview.body), colour: preview.cut ? "#d6312b" : "#0c66e4", opacity: 0.3 });
   vp.setGhosts(items);
@@ -1194,6 +1201,8 @@ function click(e: PointerEvent): void {
     }
     case "hole":
       return drill(e);
+    case "part":
+      return placePart(e);
     case "extrude":
       return;
   }
@@ -1203,7 +1212,7 @@ let lastPointer: { clientX: number; clientY: number } | null = null;
 
 vp.canvas.addEventListener("pointermove", (e) => {
   lastPointer = { clientX: e.clientX, clientY: e.clientY };
-  if (mode.kind === "place" || mode.kind === "hole") {
+  if (mode.kind === "place" || mode.kind === "hole" || mode.kind === "part") {
     hoverHit = vp.pick(e);
     drawGhosts();
   } else if (mode.kind === "sketch" && mode.stage === "draw") {
@@ -1552,6 +1561,11 @@ function renderBanner(): void {
   else if (mode.kind === "measure") text = "Click two points to measure between them. Esc to stop.";
   else if (mode.kind === "sketch" && mode.stage === "plane") text = "Click a face, or the ground, to sketch on. Esc to stop.";
   else if (mode.kind === "hole") text = "Click a face of a body to drill a hole into it. Esc when done.";
+  else if (mode.kind === "part") {
+    text = mode.def.into
+      ? `Click a face of a body to cut a ${mode.def.name.toLowerCase()} into it. Esc when done.`
+      : `Click the grid or a face to put down a ${mode.def.name.toLowerCase()}. Esc when done.`;
+  }
   else if (moving && movable() && !dragging && readout.hidden) {
     text =
       gizmoMode === "translate"
@@ -1570,6 +1584,7 @@ function renderBanner(): void {
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-cmd]")) {
     const cmd = b.dataset.cmd;
     const on =
+      (cmd === `part:${mode.kind === "part" ? mode.def.id : ""}`) ||
       (cmd === "hole" && mode.kind === "hole") ||
       (cmd === "sketch" && mode.kind === "sketch") ||
       (cmd === `place:${mode.kind === "place" ? mode.body : ""}`) ||
@@ -1648,6 +1663,7 @@ function apply(id: string, next: Feature): void {
 function renderPanel(force = false): void {
   if (mode.kind === "extrude") return renderExtrudePanel();
   if (mode.kind === "hole") return renderHolePanel();
+  if (mode.kind === "part") return renderPartPanel();
   if (importSel && imported.has(importSel)) return renderImportPanel(imported.get(importSel)!, force);
   if (toolPanel && selectedBodies().length) return renderToolPanel(toolPanel);
   if (toolPanel) {
@@ -1942,10 +1958,50 @@ function applyPattern(t: Extract<ToolPanel, { kind: "pattern" }>): void {
   makeAll(made, "Patterned", bodies);
 }
 
+// Copies turned round an upright axis through (cx, cz): each a position
+// turned about the axis and a rotation turned with it.
+function applyCircular(t: Extract<ToolPanel, { kind: "circular" }>): void {
+  if (!canEdit()) return;
+  const bodies = selectedBodies();
+  const count = Math.round(t.count);
+  if (count < 2 || count > 60) return say("A circular pattern has between 2 and 60, counting the original.", true);
+  const full = Math.abs(Math.abs(t.angle) - 360) < 1e-6;
+  const step = t.angle / (full ? count : count - 1);
+  const centre = new THREE.Vector3(t.cx, 0, t.cz);
+  const made: Body[] = [];
+  for (let k = 1; k < count; k++) {
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(step * k));
+    for (const f of bodies) {
+      const local = { ...(featureOf(f) as Body), pos: [f.pos[0] - t.cx, f.pos[1], f.pos[2] - t.cz] as Vec3, name: `${f.name} ${k + 1}` };
+      made.push(placeSteps([{ ref: "b", f: local }], q, centre)[0].f as Body);
+    }
+  }
+  makeAll(made, "Patterned", bodies);
+}
+
+function applyGrid(t: Extract<ToolPanel, { kind: "grid" }>): void {
+  if (!canEdit()) return;
+  const bodies = selectedBodies();
+  const nx = Math.round(t.nx), nz = Math.round(t.nz);
+  if (nx < 1 || nz < 1 || nx * nz < 2 || nx * nz > 100) return say("A grid has between 2 and 100 places, counting the original.", true);
+  const made: Body[] = [];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      if (!i && !j) continue;
+      for (const f of bodies) made.push({ ...(featureOf(f) as Body), name: `${f.name} ${i + 1}.${j + 1}`, pos: [round(f.pos[0] + i * t.sx), f.pos[1], round(f.pos[2] + j * t.sz)] });
+    }
+  }
+  makeAll(made, "Patterned", bodies);
+}
+
 function openTool(kind: ToolPanel["kind"]): void {
   const bodies = selectedBodies();
-  if (!bodies.length) return say(`Select the bodies to ${kind} first.`, true);
+  if (!bodies.length) return say(`Select the bodies to ${kind === "circular" || kind === "grid" ? "pattern" : kind} first.`, true);
+  const size = boundsOf(bodies).getSize(new THREE.Vector3());
+  const gap = (n: number) => Math.ceil((n + grid) / grid) * grid;
   if (kind === "mirror") toolPanel = { kind, axis: "x", at: 0 };
+  else if (kind === "circular") toolPanel = { kind, count: 6, angle: 360, cx: 0, cz: 0 };
+  else if (kind === "grid") toolPanel = { kind, nx: 3, nz: 2, sx: gap(size.x), sz: gap(size.z) };
   else {
     const size = boundsOf(bodies).getSize(new THREE.Vector3());
     toolPanel = { kind, axis: "x", count: 3, spacing: Math.ceil((size.x + grid) / grid) * grid };
@@ -2025,7 +2081,29 @@ function renderToolPanel(t: ToolPanel): void {
   foot.className = "panel-foot";
   let title: string;
   let axisRow: HTMLElement;
-  if (t.kind === "mirror") {
+  if (t.kind === "circular") {
+    title = "CIRCULAR PATTERN";
+    axisRow = document.createElement("span");
+    fields.append(
+      numberField("Count", t.count, (n) => (t.count = n), "pcs"),
+      numberField("Total angle", t.angle, (n) => (t.angle = n), "°"),
+      numberField("Centre X", t.cx, (n) => (t.cx = n)),
+      numberField("Centre Z", t.cz, (n) => (t.cz = n)),
+    );
+    note.textContent = `Copies of ${names} round an upright axis through the centre, the original first. 360° spaces them evenly all the way round.`;
+    foot.append(button("Cancel", "", close), button("Pattern", "primary", () => applyCircular(t)));
+  } else if (t.kind === "grid") {
+    title = "GRID PATTERN";
+    axisRow = document.createElement("span");
+    fields.append(
+      numberField("Along X", t.nx, (n) => (t.nx = n), "pcs"),
+      numberField("Spacing X", t.sx, (n) => (t.sx = n)),
+      numberField("Along Z", t.nz, (n) => (t.nz = n), "pcs"),
+      numberField("Spacing Z", t.sz, (n) => (t.sz = n)),
+    );
+    note.textContent = `Rows and columns of ${names} across the floor, the original in the first corner.`;
+    foot.append(button("Cancel", "", close), button("Pattern", "primary", () => applyGrid(t)));
+  } else if (t.kind === "mirror") {
     title = "MIRROR";
     axisRow = choose("Across", [["x", "Left to right (X)"], ["z", "Front to back (Z)"]], t.axis, (v) => (t.axis = v as "x" | "z"));
     fields.append(numberField("Mirror plane at", t.at, (n) => (t.at = n)));
@@ -2042,6 +2120,120 @@ function renderToolPanel(t: ToolPanel): void {
     foot.append(button("Cancel", "", close), button("Pattern", "primary", () => applyPattern(t)));
   }
   panel.replaceChildren(head(title, close), axisRow, fields, note, foot);
+}
+
+// ---------- ready-made parts (parts.ts): placed where you click ----------
+
+function partAt(m: Extract<Mode, { kind: "part" }>, hit: { point: THREE.Vector3; normal: THREE.Vector3; id: string | null }): PartStep[] | null {
+  if (m.def.into && !hit.id) return null;
+  if (m.def.check?.(m.v)) return null;
+  const n = hit.normal.clone().normalize();
+  const at = hit.point.clone();
+  // on a flat, square-on face, snap across it to the grid
+  if (Math.max(Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)) > 0.999) {
+    for (const axis of ["x", "y", "z"] as const) if (Math.abs(n[axis]) < 0.5) at[axis] = snapValue(at[axis]);
+  }
+  return placeSteps(m.def.build(m.v), faceFrame(n, m.def.into, m.v.turn ?? 0), at);
+}
+
+function partPreview(): { geometry: THREE.BufferGeometry; colour: string; opacity?: number }[] {
+  if (mode.kind !== "part" || !hoverHit) return [];
+  const steps = partAt(mode, hoverHit);
+  if (!steps) return [];
+  const cutters = new Set(steps.flatMap((s) => (s.f.kind === "combine" && s.f.op === "cut" ? s.f.tools : [])));
+  return steps
+    .filter((s) => s.f.kind !== "combine")
+    .map((s) => ({ geometry: worldGeometry(s.f as Body), colour: cutters.has(s.ref) ? "#d6312b" : "#0c66e4", opacity: 0.3 }));
+}
+
+function placePart(e: PointerEvent): void {
+  if (mode.kind !== "part" || !canEdit()) return;
+  const m = mode;
+  const problem = m.def.check?.(m.v);
+  if (problem) return say(`Not made: ${problem}.`, true);
+  const hit = vp.pick(e);
+  if (!hit) return;
+  if (m.def.into && !hit.id) return say(`Click a face of a body to cut the ${m.def.name.toLowerCase()} into.`, true);
+  if (hit.id && m.def.into) {
+    const holder = heldByOther(hit.id);
+    if (holder) return say(`${nameOf(holder)} is holding ${features.get(hit.id)?.name}. Cut into it once they let go.`, true);
+  }
+  const steps = partAt(m, hit);
+  if (!steps || !roomFor(steps.length)) return;
+  // give each piece its id, then point the combines at them
+  const ids = new Map(steps.map((s) => [s.ref, newId()]));
+  if (hit.id) ids.set("@face", hit.id);
+  const resolved = steps.map(({ ref, f }) => ({
+    id: ids.get(ref)!,
+    f: f.kind === "combine" ? { ...f, target: ids.get(f.target)!, tools: f.tools.map((t) => ids.get(t)!) } : f,
+  }));
+  // check every piece first, so a bad number makes nothing rather than half a part
+  for (const { f } of resolved) {
+    const v = validateFeature(f);
+    if (typeof v === "string") return say(`Not made: ${v}.`, true);
+  }
+  const changes: (Change | null)[] = [];
+  for (const { id, f } of resolved) {
+    const c = commitAdd(f, id);
+    changes.push(c);
+    if (!c) break;
+  }
+  record(changes);
+  say(`${m.def.name} made${m.def.into ? ` in ${features.get(hit.id!)?.name}` : ""}. Click again for another, Esc when done. Every number stays editable on its pieces.`);
+}
+
+function renderPartPanel(): void {
+  if (mode.kind !== "part") return;
+  const m = mode;
+  panel.hidden = false;
+  if (panelKey === `part:${m.def.id}` && panel.contains(document.activeElement)) return;
+  panelKey = `part:${m.def.id}`;
+  const items: HTMLElement[] = [head(m.def.name.toUpperCase(), cancelMode)];
+  if (m.def.presets) {
+    const l = document.createElement("label");
+    l.className = "wide";
+    const span = document.createElement("span");
+    span.textContent = "Size";
+    const sel = document.createElement("select");
+    sel.add(new Option("Custom", ""));
+    for (const p of m.def.presets) {
+      const match = Object.entries(p.values).every(([k, n]) => m.v[k] === n);
+      sel.add(new Option(p.label, p.label, false, match));
+    }
+    sel.addEventListener("change", () => {
+      const p = m.def.presets!.find((x) => x.label === sel.value);
+      if (p) Object.assign(m.v, p.values);
+      panelKey = "";
+      renderPanel(true);
+      refresh();
+    });
+    l.append(span, sel);
+    items.push(l);
+  }
+  const fields = document.createElement("div");
+  fields.className = "fields";
+  for (const p of [...m.def.params, TURN]) {
+    fields.append(
+      numberField(p.label, m.v[p.key] ?? 0, (n) => {
+        if (n < p.min || (p.max !== undefined && n > p.max)) return say(`${p.label} has to be between ${p.min} and ${p.max ?? "any size"}.`, true);
+        m.v[p.key] = p.whole ? Math.round(n) : n;
+        const problem = m.def.check?.(m.v);
+        if (problem) say(`${problem[0].toUpperCase()}${problem.slice(1)}.`, true);
+        panelKey = "";
+        renderPanel(true);
+        refresh();
+      }, p.unit),
+    );
+  }
+  items.push(fields);
+  const note = document.createElement("p");
+  note.className = "note";
+  note.textContent = m.def.note;
+  const foot = document.createElement("div");
+  foot.className = "panel-foot";
+  foot.append(button("Done", "primary", cancelMode));
+  items.push(note, foot);
+  panel.replaceChildren(...items);
 }
 
 function renderHolePanel(): void {
@@ -2286,7 +2478,15 @@ function command(cmd: string): void {
   if (cmd === "combine") return openCombine();
   if (cmd === "import") return importInput.click();
   if (cmd === "duplicate") return duplicate();
-  if (cmd === "mirror" || cmd === "pattern") return openTool(cmd);
+  if (cmd === "mirror" || cmd === "pattern" || cmd === "circular" || cmd === "grid") return openTool(cmd);
+  if (cmd.startsWith("part:")) {
+    const def = PARTS.find((p) => p.id === cmd.slice(5));
+    if (!def) return;
+    select([]);
+    mode = { kind: "part", def, v: { ...def.defaults, turn: 0 } };
+    panelKey = "";
+    return refresh();
+  }
   if (cmd === "hole") {
     select([]);
     mode = { kind: "hole", d: 6, depth: 10 };
