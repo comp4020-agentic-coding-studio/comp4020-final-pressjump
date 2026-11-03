@@ -25,7 +25,7 @@ import {
   type Stored,
   type Vec3,
 } from "../shared/model.ts";
-import { LIMITS, cleanName, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
+import { LIMITS, cleanName, pack, unpack, type Camera, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
 import { installTips, seenTour, startTour, tourRunning, type Step } from "./tour.ts";
 import { PARTS, TURN, faceFrame, placeSteps, type PartDef, type Step as PartStep } from "../shared/parts.ts";
 import { Viewport, type Display } from "./viewport.ts";
@@ -298,7 +298,7 @@ function receive(msg: ServerMessage): void {
       features.clear();
       optimistic.clear();
       overrides.clear();
-      for (const f of msg.features) features.set(f.id, f);
+      for (const f of msg.features) features.set(f.id, unpack(f));
       msg.authors.forEach(learn);
       online.clear();
       for (const p of msg.people) {
@@ -332,11 +332,24 @@ function receive(msg: ServerMessage): void {
           else setTimeout(beginTour, 700);
         }
       }
+      // a fresh connection: everything about this cursor is news again
+      sentCursor = {};
       sendHold(true);
       refresh();
       return;
     }
+    case "ok": {
+      // our own edit, stored: it already shows here, so only its version and
+      // its place in the timeline come back
+      const local = features.get(msg.id);
+      if (!local || msg.v < local.v) return; // a newer edit of ours is on its way
+      optimistic.delete(msg.id);
+      features.set(msg.id, { ...local, v: msg.v, seq: msg.seq, by: me?.id ?? local.by });
+      refresh();
+      return;
+    }
     case "put": {
+      msg.feature = unpack(msg.feature);
       const local = features.get(msg.feature.id);
       // an answer to an older edit of ours, overtaken by a newer one already
       // showing here: keep the newer one until its own answer comes
@@ -389,9 +402,14 @@ function receive(msg: ServerMessage): void {
       return;
     }
     case "cursors": {
+      // only news arrives: merge it into what we know of each person
       for (const c of msg.cursors) {
         if (c.id === me?.id) continue;
-        remote.set(c.id, c);
+        const known = remote.get(c.id) ?? { id: c.id };
+        if ("at" in c) known.at = c.at;
+        if (c.cam) known.cam = c.cam;
+        if ("draft" in c) known.draft = c.draft ? c.draft.map((f) => unpack(f)) : null;
+        remote.set(c.id, known);
         if (c.id === following && c.cam) vp.flyTo(c.cam, 120);
       }
       for (const id of msg.gone) remote.delete(id);
@@ -405,7 +423,7 @@ function receive(msg: ServerMessage): void {
     }
     case "reject": {
       optimistic.delete(msg.id);
-      if (msg.feature) features.set(msg.id, msg.feature);
+      if (msg.feature) features.set(msg.id, unpack(msg.feature));
       else {
         features.delete(msg.id);
         selection.delete(msg.id);
@@ -453,7 +471,7 @@ function commitAdd(f: Feature, id = newId()): Change | null {
   const seq = Math.max(0, ...[...features.values()].map((x) => x.seq)) + 1;
   features.set(id, { ...v, id, v: 1, by: me.id, seq } as Stored);
   optimistic.add(id);
-  send({ t: "add", id, f: v });
+  send({ t: "add", id, f: pack(v) });
   return { id, before: null, after: v };
 }
 
@@ -466,7 +484,7 @@ function commitUpdate(id: string, f: Feature): Change | null {
   if (sameFeature(before, v)) return null;
   features.set(id, { ...v, id, v: current.v + 1, by: me.id, seq: current.seq } as Stored);
   optimistic.add(id);
-  send({ t: "update", id, base: current.v, f: v });
+  send({ t: "update", id, base: current.v, f: pack(v) });
   return { id, before, after: v };
 }
 
@@ -1233,6 +1251,8 @@ vp.canvas.addEventListener("pointermove", (e) => {
 vp.canvas.addEventListener("pointerleave", () => {
   lastPointer = null;
   send({ t: "leave" });
+  // the server forgets a cursor that leaves, so next time it is all news
+  sentCursor = {};
 });
 
 vp.controls.addEventListener("change", () => sendCursor());
@@ -1242,23 +1262,40 @@ let lastSent = 0;
 let cursorTimer: ReturnType<typeof setTimeout> | undefined;
 function sendCursor(): void {
   if (!live) return;
-  const wait = 50 - (performance.now() - lastSent);
+  // A pointer on its own goes out ten times a second (others see it glide
+  // between); a drag or a preview twenty, so what is being moved keeps up.
+  const busy = overrides.size > 0 || previewBody() !== null;
+  const wait = (busy ? 50 : 100) - (performance.now() - lastSent);
   clearTimeout(cursorTimer);
   if (wait > 0) {
     cursorTimer = setTimeout(sendCursor, wait);
     return;
   }
   lastSent = performance.now();
+  // A tenth of a millimetre is finer than anyone can point, and much shorter
+  // to send than a thousandth.
+  const tenth = (n: number) => Math.round(n * 10) / 10 + 0;
   let at: Vec3 | null = null;
   if (lastPointer) {
     const hit = vp.pick(lastPointer);
-    if (hit) at = [round(hit.point.x), round(hit.point.y), round(hit.point.z)];
+    if (hit) at = [tenth(hit.point.x), tenth(hit.point.y), tenth(hit.point.z)];
   }
-  const draft = [...overrides.values()];
+  const view = vp.view();
+  const cam: Camera = { p: view.p.map(tenth) as Vec3, t: view.t.map(tenth) as Vec3 };
+  const bodies = [...overrides.values()];
   const preview = previewBody();
-  if (preview) draft.push(preview.body);
-  send({ t: "cursor", at, cam: vp.view(), draft: draft.length ? draft : undefined });
+  if (preview) bodies.push(preview.body);
+  const draft = bodies.length ? bodies.map((b) => pack(b)) : null;
+  // only what changed since the last one; nothing at all if nothing did
+  const msg: Extract<ClientMessage, { t: "cursor" }> = { t: "cursor" };
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  if (!("at" in sentCursor) || !same(at, sentCursor.at)) msg.at = sentCursor.at = at;
+  if (!same(cam, sentCursor.cam)) msg.cam = sentCursor.cam = cam;
+  if (!("draft" in sentCursor) || !same(draft, sentCursor.draft)) msg.draft = sentCursor.draft = draft;
+  if (Object.keys(msg).length > 1) send(msg);
 }
+// what the others were last told about this cursor
+let sentCursor: { at?: Vec3 | null; cam?: Camera; draft?: Body[] | null } = {};
 
 // ---------- overlays: sketch lines, measurement, labels ----------
 

@@ -63,6 +63,14 @@ over unchanged; everything below that names 3D is new with that rebuild.
    - Presence traffic (cursor, camera, drafts) is batched by the server, one
      message per client per 50 ms at most, because a full room is the case
      this is designed for.
+   - Only news travels. A cursor message carries only what changed (pointer
+     to 0.1 mm, camera, drag; nothing when still; a bare pointer at most ten
+     times a second), the server forwards only changes and never your own,
+     and gives a newcomer everyone's current state once. Your own edit comes
+     back as a short `ok` (version, place), not the whole feature; everyone
+     else gets the feature. Features travel with default numbers left out
+     (`pack`/`unpack` in `shared/protocol.ts`), restored before anything
+     checks them. `spec/traffic` holds all of this.
 
 4. **It stays.**
    - A change is written to SQLite before it is broadcast. Never reorder these.

@@ -4,8 +4,8 @@
 
 import { randomBytes } from "node:crypto";
 import { inject } from "vitest";
-import type { Body, Feature, Stored } from "../shared/model.ts";
-import type { ClientMessage, Design, Person, ServerMessage } from "../shared/protocol.ts";
+import { validateFeature, type Body, type Feature, type Stored } from "../shared/model.ts";
+import { unpack, type ClientMessage, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
 
 export const baseUrl = inject("baseUrl");
 
@@ -59,7 +59,14 @@ export async function visit(design: string, as = token(), name = "Spec"): Promis
   const inbox: ServerMessage[] = [];
   const waiting = new Set<() => void>();
   ws.addEventListener("message", (e) => {
-    inbox.push(JSON.parse(String(e.data)) as ServerMessage);
+    // features travel with their defaults left out; read them back whole, as
+    // the editor does, so the spec is about what they mean
+    const m = JSON.parse(String(e.data)) as ServerMessage;
+    if (m.t === "welcome") m.features = m.features.map((f) => unpack(f));
+    if (m.t === "put") m.feature = unpack(m.feature);
+    if (m.t === "reject" && m.feature) m.feature = unpack(m.feature);
+    if (m.t === "cursors") for (const c of m.cursors) if (c.draft) c.draft = c.draft.map((f) => unpack(f));
+    inbox.push(m);
     for (const wake of [...waiting]) wake();
   });
   const closed = new Promise<{ code: number }>((resolve) => {
@@ -105,12 +112,14 @@ export async function visit(design: string, as = token(), name = "Spec"): Promis
   };
 }
 
-// Adds a feature and waits for the server to confirm it.
+// Adds a feature and waits for the server to confirm it. The one who adds a
+// feature is told only "ok", with its version and place in the timeline;
+// what was stored is what they sent, as the server checks and cleans it.
 export async function add(v: Visitor, f: Feature): Promise<Stored> {
   const featureId = id();
   v.send({ t: "add", id: featureId, f });
-  const put = await v.next("put", (m) => m.feature.id === featureId);
-  return put.feature;
+  const ok = await v.next("ok", (m) => m.id === featureId);
+  return { ...(validateFeature(f) as Feature), id: featureId, v: ok.v, by: v.you.id, seq: ok.seq } as Stored;
 }
 
 // A binary STL, read back: its triangles' volume and how far it reaches.

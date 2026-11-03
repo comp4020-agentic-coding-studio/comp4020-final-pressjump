@@ -18,6 +18,8 @@ import {
   LIMITS,
   PEOPLE_COLOURS,
   cleanName,
+  pack,
+  unpack,
   type Camera,
   type ClientMessage,
   type Cursor,
@@ -79,6 +81,9 @@ export class Room {
   conns = new Set<Conn>();
   // feature id -> the connection holding it
   holds = new Map<string, Conn>();
+  // each person's cursor as it stands, for newcomers, and what has changed
+  // since the last flush, which is all that goes out
+  latest = new Map<string, Cursor>();
   cursors = new Map<string, Cursor>();
   gone = new Set<string>();
   flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -133,11 +138,14 @@ export class Room {
         t: "welcome",
         you: conn.person,
         design: this.design,
-        features: [...this.features.values()],
+        features: [...this.features.values()].map(pack),
         people: this.people(),
         authors: [...authorIds].map(personById),
         holds: this.holdMap(),
       });
+      // where everyone already here is pointing, once; after this, only changes
+      const here = [...this.latest.values()].filter((c) => c.id !== conn.person!.id);
+      if (here.length) this.send(conn, { t: "cursors", cursors: here, gone: [] });
       this.broadcastPeople();
       return;
     }
@@ -155,7 +163,7 @@ export class Room {
         if (this.features.size >= LIMITS.featuresPerDesign) {
           return this.reject(conn, msg.id, "full", `a design holds at most ${LIMITS.featuresPerDesign} features`);
         }
-        const f = validateFeature(msg.f);
+        const f = validateFeature(unpack(msg.f));
         if (typeof f === "string") return this.reject(conn, msg.id, "invalid", f);
         const problem = checkReferences(this.features, f);
         if (problem) return this.reject(conn, msg.id, "invalid", problem);
@@ -168,7 +176,7 @@ export class Room {
             }
           }
         }
-        this.commit({ ...f, id: msg.id, v: 1, by: me.id, seq: this.nextSeq++ });
+        this.commit({ ...f, id: msg.id, v: 1, by: me.id, seq: this.nextSeq++ }, conn);
         return;
       }
       case "update":
@@ -194,12 +202,12 @@ export class Room {
           this.broadcast({ t: "del", id: current.id, by: me.id });
           return;
         }
-        const f = validateFeature(msg.f);
+        const f = validateFeature(unpack(msg.f));
         if (typeof f === "string") return this.reject(conn, current.id, "invalid", f);
         if (f.kind !== current.kind) return this.reject(conn, current.id, "invalid", "a feature cannot change kind");
         const problem = checkReferences(this.features, f, current);
         if (problem) return this.reject(conn, current.id, "invalid", problem);
-        this.commit({ ...f, id: current.id, v: current.v + 1, by: me.id, seq: current.seq });
+        this.commit({ ...f, id: current.id, v: current.v + 1, by: me.id, seq: current.seq }, conn);
         return;
       }
       case "hold": {
@@ -229,25 +237,32 @@ export class Room {
         return;
       }
       case "cursor": {
-        const at = msg.at === null ? null : vec3(msg.at, LIMIT * 4) ? msg.at : undefined;
-        if (at === undefined) return;
-        let cam: Camera | undefined;
-        if (msg.cam && vec3(msg.cam.p, LIMIT * 20) && vec3(msg.cam.t, LIMIT * 20)) cam = { p: msg.cam.p, t: msg.cam.t };
-        let draft: Draft | undefined;
-        if (Array.isArray(msg.draft)) {
-          draft = [];
-          for (const raw of msg.draft.slice(0, LIMITS.draftFeatures)) {
-            const f = validateFeature(raw);
-            if (typeof f !== "string" && f.kind !== "combine") draft.push(f);
-          }
+        // only what changed: each field that is present, and valid, is news
+        const news: Cursor = { id: me.id };
+        if ("at" in msg) {
+          if (msg.at === null) news.at = null;
+          else if (vec3(msg.at, LIMIT * 4)) news.at = msg.at;
         }
-        this.cursors.set(me.id, { id: me.id, at, cam, draft });
+        if (msg.cam && vec3(msg.cam.p, LIMIT * 20) && vec3(msg.cam.t, LIMIT * 20)) news.cam = { p: msg.cam.p, t: msg.cam.t };
+        if (msg.draft === null) news.draft = null;
+        else if (Array.isArray(msg.draft)) {
+          const draft: Draft = [];
+          for (const raw of msg.draft.slice(0, LIMITS.draftFeatures)) {
+            const f = validateFeature(unpack(raw));
+            if (typeof f !== "string" && f.kind !== "combine") draft.push(pack(f));
+          }
+          news.draft = draft;
+        }
+        if (Object.keys(news).length === 1) return;
+        this.latest.set(me.id, { ...this.latest.get(me.id), ...news });
+        this.cursors.set(me.id, { ...this.cursors.get(me.id), ...news });
         this.gone.delete(me.id);
         this.scheduleFlush();
         return;
       }
       case "leave": {
         this.cursors.delete(me.id);
+        this.latest.delete(me.id);
         this.gone.add(me.id);
         this.scheduleFlush();
         return;
@@ -280,15 +295,19 @@ export class Room {
     }
   }
 
-  // Disk first, then everyone. Never the other way round.
-  commit(f: Stored): void {
+  // Disk first, then everyone. Never the other way round. The person whose
+  // edit it was already shows it, so they get a short "ok" with the version
+  // and place it was stored at; everyone else gets the feature.
+  commit(f: Stored, from: Conn): void {
     db.putFeature(this.design.id, f);
     this.features.set(f.id, f);
-    this.broadcast({ t: "put", feature: f });
+    this.send(from, { t: "ok", id: f.id, v: f.v, seq: f.seq });
+    this.broadcast({ t: "put", feature: pack(f) }, from);
   }
 
   reject(conn: Conn, id: string, reason: Reason, message: string, who?: string): void {
-    this.send(conn, { t: "reject", id, reason, message, feature: this.features.get(id) ?? null, who });
+    const now = this.features.get(id);
+    this.send(conn, { t: "reject", id, reason, message, feature: now ? pack(now) : null, who });
   }
 
   holdMap(): Record<string, string> {
@@ -313,7 +332,7 @@ export class Room {
 
   // Cursors, cameras and drafts are batched: at most one message per client
   // per flush interval however many people are moving, because a full room is
-  // the case this is designed for.
+  // the case this is designed for. Each person gets only other people's news.
   scheduleFlush(): void {
     if (this.flushTimer) return;
     this.flushTimer = setTimeout(() => {
@@ -322,7 +341,13 @@ export class Room {
       const gone = [...this.gone];
       this.cursors.clear();
       this.gone.clear();
-      if (cursors.length || gone.length) this.broadcast({ t: "cursors", cursors, gone });
+      if (!cursors.length && !gone.length) return;
+      for (const c of this.conns) {
+        if (!c.person || c.ws.readyState !== c.ws.OPEN) continue;
+        const theirs = cursors.filter((x) => x.id !== c.person!.id);
+        const left = gone.filter((id) => id !== c.person!.id);
+        if (theirs.length || left.length) c.ws.send(JSON.stringify({ t: "cursors", cursors: theirs, gone: left }));
+      }
     }, LIMITS.cursorFlushMs);
   }
 
@@ -351,6 +376,7 @@ export class Room {
     if (changed) this.broadcastHolds();
     if (conn.person && !this.people().some((p) => p.id === conn.person?.id)) {
       this.cursors.delete(conn.person.id);
+      this.latest.delete(conn.person.id);
       this.gone.add(conn.person.id);
       this.scheduleFlush();
     }
@@ -367,9 +393,9 @@ export class Room {
     if (conn.ws.readyState === conn.ws.OPEN) conn.ws.send(JSON.stringify(msg));
   }
 
-  broadcast(msg: ServerMessage): void {
+  broadcast(msg: ServerMessage, except?: Conn): void {
     const data = JSON.stringify(msg);
-    for (const c of this.conns) if (c.person && c.ws.readyState === c.ws.OPEN) c.ws.send(data);
+    for (const c of this.conns) if (c !== except && c.person && c.ws.readyState === c.ws.OPEN) c.ws.send(data);
   }
 }
 

@@ -145,7 +145,7 @@ describe("the STL export", () => {
 
     // move the drill clear of the plate: the hole goes with it
     a.send({ t: "update", id: drill.id, base: 1, f: cylinder({ r: 5, h: 20, pos: [100, -5, 0] }) });
-    await a.next("put", (m) => m.feature.id === drill.id && m.feature.v === 2);
+    await a.next("ok", (m) => m.id === drill.id && m.v === 2);
     expect((await stl(design.id)).volume).toBeCloseTo(16000, 0);
     await a.close();
   });

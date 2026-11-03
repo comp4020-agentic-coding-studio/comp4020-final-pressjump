@@ -11,7 +11,7 @@ it("a body is there for whoever opens the design next, as it was last left", asy
   const a = await visit(design.id, undefined, "Ada");
   const f = await add(a, box());
   a.send({ t: "update", id: f.id, base: 1, f: box({ w: 55, colour: "#2f6db5" }) });
-  await a.next("put", (m) => m.feature.v === 2);
+  await a.next("ok", (m) => m.v === 2);
   await a.close();
 
   const b = await visit(design.id);
@@ -30,7 +30,7 @@ it("the timeline keeps its order across visits", async () => {
   const three = await add(a, { kind: "combine", name: "Cut", op: "cut", target: one.id, tools: [two.id] });
   // editing the first feature does not move it to the end
   a.send({ t: "update", id: one.id, base: 1, f: box({ w: 30 }) });
-  await a.next("put", (m) => m.feature.id === one.id && m.feature.v === 2);
+  await a.next("ok", (m) => m.id === one.id && m.v === 2);
   const order = (fs: { id: string; seq: number }[]): string[] => [...fs].sort((x, y) => x.seq - y.seq).map((f) => f.id);
   // someone arriving while the design is open gets it from the server's memory
   const b = await visit(design.id);

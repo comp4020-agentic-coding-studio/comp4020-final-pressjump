@@ -46,7 +46,7 @@ describe("a held body", () => {
     await a.close();
     await b.next("holds", (m) => !(f.id in m.holds));
     b.send({ t: "update", id: f.id, base: 1, f: box({ h: 5 }) });
-    await b.next("put", (m) => m.feature.id === f.id && m.feature.v === 2);
+    await b.next("ok", (m) => m.id === f.id && m.v === 2);
     await b.close();
   });
 
@@ -99,7 +99,7 @@ describe("an edit made against an old version", () => {
     a.send({ t: "update", id: f.id, base: 1, f: box({ pos: [1, 0, 0] }) });
     a.send({ t: "update", id: f.id, base: 2, f: box({ pos: [2, 0, 0] }) });
     a.send({ t: "update", id: f.id, base: 3, f: box({ pos: [3, 0, 0] }) });
-    await a.next("put", (m) => m.feature.v === 4);
+    await a.next("ok", (m) => m.v === 4);
     expect((await stored(design.id))[0]).toMatchObject({ pos: [3, 0, 0], v: 4 });
     await a.close();
   });
