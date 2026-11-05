@@ -42,6 +42,12 @@ over unchanged; everything below that names 3D is new with that rebuild.
      target.
    - Every refusal is shown to the person refused, in words, naming who caused
      it where that is known.
+   - A design has two links. The edit link (`/d/<id>`) can change it; the
+     view link (`/v/<view>`, its own random id) can watch, point, follow and
+     export, and every change from it is refused by the server, in words. A
+     viewer is never told the edit id, and the public list of designs gives
+     out view links only (the example alone is open to edit), so neither can
+     be used to get round it. `spec/access` holds this.
    - Undo only undoes your own change, and only if the feature is still what
      you left it as. Otherwise it says why it will not.
    - While disconnected, or while looking back along the timeline, editing is
@@ -80,10 +86,18 @@ over unchanged; everything below that names 3D is new with that rebuild.
 
 ## What not to build
 
-No accounts, chat, comments or version branches. No edge fillets, constraint
-solver, assemblies or joints: each would take far longer than this project has
-to do honestly, and a half-working one breaks promise 1. If a change seems to
-need one, stop and say so instead of building it.
+No accounts, chat, comments or version branches. The guest profile is not an
+account and must not become one: your name is a cookie (`bench_guest`, with a
+copy in localStorage) and "My projects" is a list in localStorage, both kept
+by the browser alone. The server reads the cookie only to greet you on the
+home page and stores nothing of either; clearing the browser forgets you, and
+the page says so. Thumbnails come from `/api/views/<view>`: a design's
+features by its view link, never its edit id (`spec/access` holds both).
+
+No edge fillets, constraint solver, assemblies or joints: each would take far
+longer than this project has to do honestly, and a half-working one breaks
+promise 1. If a change seems to need one, stop and say so
+instead of building it.
 
 A chamfer is therefore a typed number on a box (every edge) or a cylinder
 (both rims), like a box's fillet, never an operation on picked edges. Tools
