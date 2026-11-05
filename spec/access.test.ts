@@ -100,3 +100,16 @@ describe("thumbnails by view link", () => {
     expect((await fetch(new URL(`/api/views/${design.id}`, baseUrl))).status).toBe(404);
   });
 });
+
+describe("the home page and the guest cookie", () => {
+  it("greets a returning guest by the name in their cookie, escaped, and nobody else", async () => {
+    const plain = await (await fetch(new URL("/", baseUrl))).text();
+    expect(plain).toContain('<body class="land">');
+    const res = await fetch(new URL("/", baseUrl), { headers: { Cookie: `bench_guest=${encodeURIComponent('Ada <b>"x"')}` } });
+    expect(res.headers.get("vary")).toMatch(/cookie/i);
+    const page = await res.text();
+    expect(page).toContain('<body class="land known">');
+    expect(page).toContain("Ada &#60;b&#62;&#34;x&#34;");
+    expect(page).not.toContain("<b>\"x\"");
+  });
+});

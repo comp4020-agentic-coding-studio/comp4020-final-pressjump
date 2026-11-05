@@ -133,6 +133,23 @@ function tooLarge(req: IncomingMessage, res: ServerResponse): void {
   send(res, 413, "application/json; charset=utf-8", JSON.stringify({ error: `requests are limited to ${LIMITS.messageBytes / 1024} KB; models stay in your browser and are never uploaded` }), { Connection: "close" });
 }
 
+// The home page, greeting a returning guest by the name in their cookie, so
+// the page is right before any script runs. The cookie is the browser's own
+// note of what it called itself; the server keeps nothing of it.
+function homePage(req: IncomingMessage): string {
+  const page = readFileSync(join(PUBLIC, "index.html"), "utf8");
+  const raw = (req.headers.cookie ?? "").split(/;\s*/).find((c) => c.startsWith("bench_guest="));
+  let name = "";
+  try {
+    name = raw ? cleanName(decodeURIComponent(raw.slice("bench_guest=".length))) : "";
+  } catch {
+    name = "";
+  }
+  if (!name) return page;
+  const safe = name.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  return page.replace('<body class="land">', '<body class="land known">').replaceAll("<!--guest-->", safe);
+}
+
 function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "design";
 }
@@ -150,7 +167,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://local");
   const path = url.pathname;
   try {
-    if (req.method === "GET" && path === "/") return file(res, PUBLIC, "index.html") || notFound(res);
+    if (req.method === "GET" && path === "/") return send(res, 200, TYPES[".html"], homePage(req), { Vary: "Cookie" });
     if (req.method === "GET" && path === "/readme") return send(res, 301, "text/plain", "", { Location: "/readme/" });
     if (req.method === "GET" && path === "/readme/") return send(res, 200, TYPES[".html"], readmePage());
     if (req.method === "GET" && path.startsWith("/readme/docs/")) {

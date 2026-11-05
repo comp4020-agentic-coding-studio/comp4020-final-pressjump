@@ -566,7 +566,8 @@ function run(s: Scene3D | null): void {
 
   // Leo selects "together", then orbits the view by dragging empty floor.
   (async () => {
-    const word = $(".hero h1 em");
+    // the headline shown: a returning guest gets their own
+    const word = [...document.querySelectorAll<HTMLElement>(".hero h1 em")].find((e) => e.getClientRects().length) ?? $(".hero h1 em");
     let dir = 1;
     await wait(900);
     for (;;) {
