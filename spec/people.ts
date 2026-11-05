@@ -36,14 +36,14 @@ export const box = (over: Partial<Body> = {}): Body =>
 export const cylinder = (over: Partial<Body> = {}): Body =>
   ({ kind: "cylinder", name: "Cylinder", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#8a9097", r: 5, h: 10, chamfer: 0, ...over }) as Body;
 
-export async function newDesign(name = "spec"): Promise<Design> {
+export async function newDesign(name = "spec"): Promise<Design & { view: string }> {
   const res = await fetch(new URL("/api/designs", baseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
   if (res.status !== 201) throw new Error(`could not make a design: ${res.status}`);
-  return (await res.json()) as Design;
+  return (await res.json()) as Design & { view: string };
 }
 
 // What the server reads back from disk for a design.
@@ -52,8 +52,10 @@ export async function stored(design: string): Promise<Stored[]> {
   return ((await res.json()) as { features: Stored[] }).features;
 }
 
-export async function visit(design: string, as = token(), name = "Spec"): Promise<Visitor> {
-  const url = new URL(`/ws?design=${design}`, baseUrl);
+// Joins a design by its edit link (the design's id) or, with via "view", by
+// its view-only link's id.
+export async function visit(design: string, as = token(), name = "Spec", via: "design" | "view" = "design"): Promise<Visitor> {
+  const url = new URL(`/ws?${via}=${design}`, baseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(url);
   const inbox: ServerMessage[] = [];

@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize, sep } from "node:path";
 import { marked } from "marked";
 import { WebSocketServer } from "ws";
-import { LIMITS, cleanName, type Design } from "../shared/protocol.ts";
+import { LIMITS, cleanName, pack, type Design } from "../shared/protocol.ts";
 import { EXAMPLE_ID, EXAMPLE_NAME, exampleFeatures } from "../shared/example.ts";
 import { checkReferences, validateFeature, type Stored } from "../shared/model.ts";
 import * as db from "./db.ts";
@@ -157,12 +157,23 @@ const server = createServer(async (req, res) => {
       return file(res, DOCS, decodeURIComponent(path.slice("/readme/docs/".length))) || notFound(res);
     }
 
+    // The public list gives out view links only, so it cannot be used to get
+    // an edit link; the example is the one design anyone may edit.
     if (path === "/api/designs" && req.method === "GET") {
       const online = onlineCounts();
       return json(
         res,
         200,
-        db.listDesigns().map((d) => ({ ...d, online: online.get(d.id) ?? 0 })),
+        db.listDesigns().map((d) => ({
+          link: d.id === EXAMPLE_ID ? `/d/${d.id}` : `/v/${d.view}`,
+          // for its thumbnail, from /api/views/<view>
+          view: d.view,
+          name: d.name,
+          updated: d.updated,
+          features: d.features,
+          online: online.get(d.id) ?? 0,
+          editable: d.id === EXAMPLE_ID,
+        })),
       );
     }
     if (path === "/api/designs" && req.method === "POST") {
@@ -176,8 +187,8 @@ const server = createServer(async (req, res) => {
       const name = cleanName(input.name);
       if (!name) return json(res, 400, { error: "a design needs a name" });
       const design: Design = { id: newId(), name };
-      db.addDesign(design);
-      return json(res, 201, design);
+      const view = db.addDesign(design);
+      return json(res, 201, { ...design, view });
     }
 
     const api = path.match(/^\/api\/designs\/([A-Za-z0-9]{1,20})$/);
@@ -187,11 +198,23 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { design, features: db.loadFeatures(design.id) });
     }
 
-    const page = path.match(/^\/d\/([A-Za-z0-9]{1,20})\/?(export\.stl)?$/);
+    // A design's features by its view link, for the thumbnails on the home
+    // page: what anyone holding that link could watch anyway, packed, and
+    // never the edit id.
+    const viewApi = path.match(/^\/api\/views\/([A-Za-z0-9]{1,20})$/);
+    if (viewApi && req.method === "GET") {
+      const design = db.getDesignByView(viewApi[1]);
+      if (!design) return json(res, 404, { error: "no such design" });
+      const features = db.loadFeatures(design.id).map((f) => pack(f));
+      return json(res, 200, { name: design.name, features });
+    }
+
+    // /d/<id> edits, /v/<view> only watches; both open the editor and export
+    const page = path.match(/^\/(d|v)\/([A-Za-z0-9]{1,20})\/?(export\.stl)?$/);
     if (page && req.method === "GET") {
-      const design = db.getDesign(page[1]);
+      const design = page[1] === "d" ? db.getDesign(page[2]) : db.getDesignByView(page[2]);
       if (!design) return notFound(res);
-      if (!page[2]) return file(res, PUBLIC, "design.html") || notFound(res);
+      if (!page[3]) return file(res, PUBLIC, "design.html") || notFound(res);
       return send(res, 200, "model/stl", toStl(design.name, db.loadFeatures(design.id)), {
         "Content-Disposition": `attachment; filename="${slug(design.name)}.stl"`,
       });
@@ -211,7 +234,10 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: LIMITS.messageByte
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://local");
-  const design = url.pathname === "/ws" ? db.getDesign(url.searchParams.get("design") ?? "") : undefined;
+  // ?design=<id> comes in to edit, ?view=<view> to watch
+  const viewing = url.searchParams.has("view");
+  const design =
+    url.pathname !== "/ws" ? undefined : viewing ? db.getDesignByView(url.searchParams.get("view") ?? "") : db.getDesign(url.searchParams.get("design") ?? "");
   if (!design) {
     socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
     socket.destroy();
@@ -228,7 +254,7 @@ server.on("upgrade", (req, socket, head) => {
       ws.ping();
     }, 25_000);
     ws.on("close", () => clearInterval(ping));
-    roomFor(design).join(ws);
+    roomFor(design).join(ws, viewing ? "view" : "edit");
   });
 });
 

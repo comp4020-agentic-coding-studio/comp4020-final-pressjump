@@ -25,7 +25,13 @@ export type ClientMessage =
   | { t: "name"; name: string }
   | { t: "rename"; name: string };
 
-export type Reason = "held" | "stale" | "missing" | "exists" | "invalid" | "used" | "full";
+export type Reason = "held" | "stale" | "missing" | "exists" | "invalid" | "used" | "full" | "readonly";
+
+// What a link lets you do: change the design, or only watch it (point,
+// follow, export). Each person is told theirs, and the links they may pass on:
+// an editor both, a viewer only the view link.
+export type Access = "edit" | "view";
+export type Links = { edit?: string; view: string };
 
 // One person's cursor news, again only what changed: a field that is absent
 // is as it was.
@@ -40,6 +46,8 @@ export type ServerMessage =
       people: Person[];
       authors: Person[];
       holds: Record<string, string>;
+      access: Access;
+      links: Links;
     }
   | { t: "put"; feature: Stored }
   // to the person whose edit it was, instead of the whole feature back: it is

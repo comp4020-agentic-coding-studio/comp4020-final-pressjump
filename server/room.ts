@@ -20,6 +20,7 @@ import {
   cleanName,
   pack,
   unpack,
+  type Access,
   type Camera,
   type ClientMessage,
   type Cursor,
@@ -33,6 +34,8 @@ import * as db from "./db.ts";
 
 type Conn = {
   ws: WebSocket;
+  // what the link this connection came in by lets it do
+  access: Access;
   person: Person | null;
   lastSeen: number;
   // rate limiting: messages counted in the current one-second window
@@ -96,8 +99,8 @@ export class Room {
     }
   }
 
-  join(ws: WebSocket): void {
-    const conn: Conn = { ws, person: null, lastSeen: Date.now(), window: 0, count: 0 };
+  join(ws: WebSocket, access: Access = "edit"): void {
+    const conn: Conn = { ws, access, person: null, lastSeen: Date.now(), window: 0, count: 0 };
     this.conns.add(conn);
     ws.on("message", (data, isBinary) => {
       if (isBinary) return this.close(conn, 1003, "text only");
@@ -134,10 +137,14 @@ export class Room {
       }
       conn.person = personFor(msg.token, msg.name);
       const authorIds = new Set([...this.features.values()].map((f) => f.by));
+      const view = db.viewOf(this.design.id);
       this.send(conn, {
         t: "welcome",
         you: conn.person,
-        design: this.design,
+        design: this.designFor(conn),
+        access: conn.access,
+        // an editor may pass on either link; a viewer only the one they came by
+        links: conn.access === "edit" ? { edit: `/d/${this.design.id}`, view: `/v/${view}` } : { view: `/v/${view}` },
         features: [...this.features.values()].map(pack),
         people: this.people(),
         authors: [...authorIds].map(personById),
@@ -151,6 +158,13 @@ export class Room {
     }
     const me = conn.person;
     if (!me) return this.close(conn, 1008, "say hello first");
+
+    // A view-only link watches: it can point and be seen, but every change is
+    // refused, and says why.
+    if (conn.access === "view" && (msg.t === "add" || msg.t === "update" || msg.t === "delete" || msg.t === "hold" || msg.t === "rename")) {
+      const ref = "id" in msg && typeof msg.id === "string" ? msg.id : "";
+      return this.reject(conn, ref, "readonly", "this link is view-only: ask whoever shared it for the edit link to make changes");
+    }
 
     switch (msg.t) {
       case "add": {
@@ -289,7 +303,7 @@ export class Room {
         if (!name) return;
         db.renameDesign(this.design.id, name);
         this.design = { ...this.design, name };
-        this.broadcast({ t: "design", design: this.design });
+        for (const c of this.conns) if (c.person) this.send(c, { t: "design", design: this.designFor(c) });
         return;
       }
     }
@@ -303,6 +317,11 @@ export class Room {
     this.features.set(f.id, f);
     this.send(from, { t: "ok", id: f.id, v: f.v, seq: f.seq });
     this.broadcast({ t: "put", feature: pack(f) }, from);
+  }
+
+  // A viewer knows the design by its view link's id, never by the edit id.
+  designFor(conn: Conn): Design {
+    return conn.access === "edit" ? this.design : { id: db.viewOf(this.design.id), name: this.design.name };
   }
 
   reject(conn: Conn, id: string, reason: Reason, message: string, who?: string): void {
