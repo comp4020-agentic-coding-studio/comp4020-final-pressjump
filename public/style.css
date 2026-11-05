@@ -269,7 +269,7 @@ kbd {
   color-scheme: light;
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   overflow: hidden;
   background: var(--chrome);
   color: var(--text);
@@ -453,66 +453,200 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 12px 2px 2px;
+  min-height: 34px;
+  padding: 2px 12px 2px 4px;
   border-radius: 999px;
   font-weight: 600;
 }
 
 /* ribbon */
 
-/* the ribbon: tabs over the command groups on the left, and at the right
-   end the help button and the people in this design */
-.ribbon {
+/* the top bar: the file and history on the left, the modes in the middle,
+   help, sharing and the people on the right. Its own height, so the share
+   button and the people are not squeezed into the ribbon's */
+.topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding-top: 6px;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 52px;
+  padding: 0 12px 0 10px;
   background: var(--chrome);
   box-shadow: inset 0 -1px 0 var(--edge);
+}
+
+.topbar-left,
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
 }
 
-.ribbon > .tabs,
-.ribbon > .groups {
-  grid-column: 1;
+.topbar-right {
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-.ribbon-side {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+.topbar-left .logo {
+  margin-right: 4px;
+}
+
+.app .file-button {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  box-shadow: inset 1px 0 0 var(--edge);
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 10px 0 12px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
 }
 
-.tabs {
+.file-button svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-2);
+}
+
+.app .file-button:hover,
+.app .file-button[aria-expanded="true"] {
+  background: var(--hover);
+}
+
+.app .tb-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.tb-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app .tb-icon:hover {
+  background: var(--hover);
+}
+
+.app .tb-icon:disabled {
+  opacity: 0.35;
+}
+
+/* the modes: a segmented switch, centred in the bar */
+.modes {
   display: flex;
-  gap: 18px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--hover);
+}
+
+.app .mode {
+  min-height: 30px;
   padding: 0 16px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  border-radius: 9px;
+  background: transparent;
   color: var(--text-2);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 30px;
 }
 
-.tab {
-  padding-bottom: 3px;
+.app .mode:hover {
+  color: var(--text);
 }
 
-.tab[aria-current="true"],
-.sketch-tab {
+.app .mode[aria-selected="true"] {
+  background: var(--chrome);
   color: var(--blue);
-  border-bottom: 2px solid var(--blue);
+  box-shadow: 0 0 0 1px var(--edge);
 }
 
-.sketching .tab[aria-current="true"] {
-  color: var(--text-2);
-  border-color: transparent;
-}
-
-.tab[hidden] {
+.mode-sketch[hidden] {
   display: none;
+}
+
+/* the lists under File and ? */
+.menu {
+  position: relative;
+}
+
+.menu-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  display: grid;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
+}
+
+.menu-list[hidden] {
+  display: none;
+}
+
+.file-list {
+  left: 0;
+  min-width: 230px;
+}
+
+.menu-list hr {
+  width: 100%;
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid var(--edge);
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 10px 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#doc-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .menu-list button,
+.menu-list a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app .menu-list button:hover,
+.menu-list a:hover {
+  background: var(--hover);
+}
+
+.ribbon {
+  padding-top: 2px;
+  background: var(--chrome);
+  box-shadow: inset 0 -1px 0 var(--edge);
+  min-width: 0;
 }
 
 .groups {
@@ -520,6 +654,8 @@ kbd {
   align-items: stretch;
   overflow-x: auto;
   scrollbar-width: thin;
+  /* room for the scrollbar, so it never sits on the group names */
+  padding-bottom: 6px;
 }
 
 .groups[hidden] {
@@ -1183,6 +1319,12 @@ kbd {
   color: var(--text);
 }
 
+.dialog-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .name-dialog::backdrop {
   background: #091e4266;
 }
@@ -1478,53 +1620,8 @@ kbd {
   font: 600 11px var(--mono);
 }
 
-.helpmenu {
-  position: relative;
-}
-
-.app .help-button {
-  width: 30px;
-  min-height: 30px;
-  padding: 0;
-  border-radius: 50%;
-  font-weight: 800;
-  color: var(--blue);
-  background: var(--blue-soft);
-}
-
 .help-list {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 6px);
   right: 0;
-  display: grid;
-  min-width: 190px;
-  padding: 6px;
-  border-radius: 12px;
-  background: var(--chrome);
-  box-shadow: 0 0 0 1px var(--edge);
-}
-
-.help-list[hidden] {
-  display: none;
-}
-
-.app .help-list button,
-.help-list a {
-  display: block;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 550;
-  text-align: left;
-  text-decoration: none;
-}
-
-.app .help-list button:hover,
-.help-list a:hover {
-  background: var(--hover);
 }
 
 .empty {
@@ -1665,24 +1762,12 @@ kbd {
   gap: 4px;
 }
 
-/* the wind toggle and the note that says what the wind is */
-.app .navbar .wind-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-left: 1px solid var(--edge);
-  border-radius: 0;
-  font-size: 12px;
-  font-weight: 600;
+/* the wind directions point the other way for minus */
+.cmd svg.flip {
+  scale: -1 1;
 }
 
-.app .navbar .wind-toggle[aria-pressed="true"] {
-  color: var(--blue);
-  background: var(--blue-soft);
-  border-radius: 8px;
-}
-
+/* the note that says what the wind is */
 .wind-note {
   position: absolute;
   top: 10px;
@@ -1704,6 +1789,7 @@ kbd {
 
 .wind-note {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 5px;
 }
 
@@ -1711,7 +1797,13 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   white-space: nowrap;
+}
+
+.wind-key > b,
+.wind-key > span:not(.wind-steps) {
+  flex-shrink: 0;
 }
 
 .wind-key b {
@@ -1720,12 +1812,17 @@ kbd {
   font-weight: 650;
 }
 
+/* the swatches give way first, so the key always fits its box */
 .wind-steps {
   display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .wind-steps i {
+  flex: 0 1 16px;
   width: 16px;
+  min-width: 3px;
   height: 10px;
 }
 
@@ -1742,13 +1839,211 @@ kbd {
   white-space: normal;
 }
 
+/* ---------- sharing: the Share button, its dialog, the invite, view-only ---------- */
+
+.app .share-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-weight: 650;
+}
+
+.app .share-button:hover {
+  background: #0055cc;
+}
+
+.share-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.view-badge {
+  display: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--well);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.view-only .view-badge {
+  display: inline-block;
+}
+
+/* a viewer can look, measure, import for themselves and export; nothing that changes the design */
+.view-only #groups-solid .cmd:not([data-cmd="measure"]),
+.view-only #groups-parts .cmd,
+.view-only #file-rename,
+.view-only #undo,
+.view-only #redo {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.share-dialog {
+  max-width: min(32rem, calc(100vw - 32px));
+}
+
+.share-row {
+  display: grid;
+  gap: 6px;
+}
+
+.share-row[hidden] {
+  display: none;
+}
+
+.share-row label {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.share-row label b {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.share-field {
+  display: flex;
+  gap: 6px;
+}
+
+.app .share-field input {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.app .share-field button,
+.app .invite button.primary {
+  min-height: 38px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.app button.copied {
+  background: #1f845a;
+  border-color: #1f845a;
+}
+
+.share-note {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.invite {
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(640px, calc(100% - 24px));
+  padding: 10px 10px 10px 16px;
+  border-radius: 14px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--edge);
+  transform: translate(-50%, calc(-100% - 20px));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 0.2s;
+}
+
+.invite.shown {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.invite-text {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.invite-text b {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.app .invite .invite-more {
+  background: transparent;
+  color: var(--blue);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app .invite .invite-close {
+  width: 30px;
+  padding: 0;
+  background: transparent;
+  font-size: 18px;
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .invite {
+    transition: none;
+  }
+}
+
 /* ---------- phones ---------- */
 
 @media (max-width: 760px) {
   .help,
   .me .label,
-  .glabel,
-  .tabs {
+  .glabel {
+    display: none;
+  }
+
+  /* two rows: file and people above, the modes across the full width below */
+  .topbar {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "left right" "modes modes";
+    height: auto;
+    row-gap: 6px;
+    padding: 6px 10px 8px;
+  }
+
+  .topbar-left {
+    grid-area: left;
+  }
+
+  .topbar-right {
+    grid-area: right;
+    gap: 6px;
+  }
+
+  .modes {
+    grid-area: modes;
+  }
+
+  .app .mode {
+    flex: 1;
+    padding: 0 8px;
+  }
+
+  /* the bar is tight on a phone: Share is its icon, and the logo goes (All
+     designs is in the File menu), so Undo and Redo always fit */
+  .app .share-button {
+    padding: 0 10px;
+  }
+
+  .share-label,
+  .topbar-left .logo {
     display: none;
   }
 
@@ -1813,6 +2108,26 @@ kbd {
   .wind-note {
     max-width: calc(100% - 110px);
     font-size: 11px;
+  }
+
+  .wind-key {
+    gap: 4px;
+  }
+
+  .wind-key b {
+    min-width: 0;
+  }
+
+  .invite {
+    flex-wrap: wrap;
+  }
+
+  .invite-text {
+    flex-basis: calc(100% - 40px);
+  }
+
+  .app .share-button {
+    padding: 0 10px;
   }
 
   .cube-wrap {

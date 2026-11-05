@@ -25,15 +25,18 @@ import {
   type Stored,
   type Vec3,
 } from "../shared/model.ts";
-import { LIMITS, cleanName, pack, unpack, type Camera, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
+import { LIMITS, cleanName, pack, unpack, type Access, type Camera, type Links, type ClientMessage, type Cursor, type Design, type Person, type ServerMessage } from "../shared/protocol.ts";
 import { installTips, seenTour, startTour, tourRunning, type Step } from "./tour.ts";
 import { PARTS, TURN, faceFrame, placeSteps, type PartDef, type Step as PartStep } from "../shared/parts.ts";
 import { Viewport, type Display } from "./viewport.ts";
 import { PRESSURE_KEY, SPEED_KEY, Wind, type WindDir } from "./wind.ts";
 import { EXAMPLE_ID } from "../shared/example.ts";
+import { guestName, remember, setGuestName } from "./guest.ts";
 import { ACCEPT, forgetImport, loadImports, placedGeometry, readModel, saveImport, standOnFloor, type Imported, type Unit } from "./importer.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
+// /d/<id> came in to edit, /v/<view> to watch; the server says which for sure
+const viewing = location.pathname.startsWith("/v/");
 const $ = <T extends Element>(id: string): T => document.getElementById(id) as unknown as T;
 
 const panel = $<HTMLElement>("panel");
@@ -55,16 +58,16 @@ const displaySelect = $<HTMLSelectElement>("display");
 
 const vp = new Viewport($("viewport"), $("cube"), labels);
 
-// The wind preview starts on only in the example design, where it shows off
-// what the editor does; everyone's own designs open with it off, and turning
-// it on there lasts for that visit. A view choice: kept here, never sent.
+// The wind preview runs in Simulate mode, and only there. The example design
+// opens in Simulate, where it shows off what the editor does; everyone's own
+// designs open in Solid. A view choice: kept here, never sent.
 const wind = new Wind(vp.scene, () => vp.schedule(), new THREE.Color("#f4f6fa"), matchMedia("(max-width: 760px)").matches);
 const windButton = $<HTMLButtonElement>("wind");
-const windDir = $<HTMLSelectElement>("wind-dir");
+const windDirButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-wind]")];
+const WIND_DIRS: readonly string[] = ["+x", "-x", "+z", "-z"];
 const windNote = $<HTMLElement>("wind-note");
 let windOn = designId === EXAMPLE_ID;
-windDir.value = stored("bench.windDir") ?? "+x";
-if (!windDir.value) windDir.value = "+x";
+let windDir: WindDir = (WIND_DIRS.includes(stored("bench.windDir") ?? "") ? stored("bench.windDir") : "+x") as WindDir;
 // the key: what the colours mean, in stepped swatches, and what the wind is not
 function keyRow(label: string, low: string, colours: string[], high: string): HTMLElement {
   const row = document.createElement("span");
@@ -100,16 +103,35 @@ wind.onGrid = (mm) => {
 function setWind(on: boolean): void {
   windOn = on;
   windButton.setAttribute("aria-pressed", String(on));
-  windDir.disabled = !on;
   if (!on) windNote.hidden = true;
-  wind.setDirection(windDir.value as WindDir);
+  for (const b of windDirButtons) b.setAttribute("aria-pressed", String(b.dataset.wind === windDir));
+  wind.setDirection(windDir);
   wind.setOn(on);
 }
 windButton.addEventListener("click", () => setWind(!windOn));
-windDir.addEventListener("change", () => {
-  store("bench.windDir", windDir.value);
-  wind.setDirection(windDir.value as WindDir);
-});
+for (const b of windDirButtons) {
+  b.addEventListener("click", () => {
+    windDir = b.dataset.wind as WindDir;
+    store("bench.windDir", windDir);
+    // picking a direction means you want to see it blow
+    setWind(true);
+  });
+}
+
+// The modes along the top: each shows its own row of tools. Simulate is the
+// one with the wind running; leaving it stops the wind.
+type Ribbon = "solid" | "parts" | "simulate";
+let ribbon: Ribbon = designId === EXAMPLE_ID ? "simulate" : "solid";
+const modeTabs = [...document.querySelectorAll<HTMLButtonElement>("[data-mode]")];
+function setRibbon(next: Ribbon): void {
+  if (mode.kind === "sketch") cancelMode();
+  const was = ribbon;
+  ribbon = next;
+  if (next === "simulate" && was !== "simulate") setWind(true);
+  if (next !== "simulate" && windOn) setWind(false);
+  renderBanner();
+}
+for (const t of modeTabs) t.addEventListener("click", () => setRibbon(t.dataset.mode as Ribbon));
 
 // ---------- who you are ----------
 // A random token in this browser is the whole of identity: a second browser is
@@ -230,7 +252,15 @@ function looking(): boolean {
   return marker !== null;
 }
 
+// what this link lets us do, and the links we may pass on (from the welcome)
+let access: Access = viewing ? "view" : "edit";
+let links: Links | null = null;
+
 function canEdit(): boolean {
+  if (access === "view") {
+    say("This link is view-only. Ask whoever shared it for the edit link to make changes.", true);
+    return false;
+  }
   if (!live) {
     say("Reconnecting; editing waits until the design is live.", true);
     return false;
@@ -253,8 +283,8 @@ function send(msg: ClientMessage): void {
 
 function connect(): void {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/ws?design=${encodeURIComponent(designId)}`);
-  ws.addEventListener("open", () => send({ t: "hello", token: token(), name: stored("bench.name") ?? "" }));
+  ws = new WebSocket(`${proto}//${location.host}/ws?${viewing ? "view" : "design"}=${encodeURIComponent(designId)}`);
+  ws.addEventListener("open", () => send({ t: "hello", token: token(), name: guestName() }));
   ws.addEventListener("message", (e) => {
     try {
       receive(JSON.parse(String(e.data)) as ServerMessage);
@@ -294,6 +324,10 @@ function receive(msg: ServerMessage): void {
     case "welcome": {
       me = msg.you;
       design = msg.design;
+      access = msg.access;
+      links = msg.links;
+      document.body.classList.toggle("view-only", access === "view");
+      renderShare();
       retry = 500;
       features.clear();
       optimistic.clear();
@@ -310,6 +344,7 @@ function receive(msg: ServerMessage): void {
       showDesign();
       renderMe();
       renderPeople();
+      considerInvite();
       setLive(true);
       if (!started) {
         started = true;
@@ -325,8 +360,8 @@ function receive(msg: ServerMessage): void {
             setTimeout(() => vp.fit(), 400);
           }, 700);
         }
-        if (!stored("bench.name")) askName();
-        if (!seenTour()) {
+        if (!guestName()) askName();
+        if (access === "edit" && !seenTour()) {
           // after the name, if it is being asked for, so the two don't overlap
           if (dialog.open) dialog.addEventListener("close", () => setTimeout(beginTour, 300), { once: true });
           else setTimeout(beginTour, 700);
@@ -381,6 +416,7 @@ function receive(msg: ServerMessage): void {
       if (following && !online.has(following)) stopFollowing();
       renderPeople();
       renderMe();
+      considerInvite();
       refresh();
       return;
     }
@@ -441,7 +477,21 @@ function receive(msg: ServerMessage): void {
 function showDesign(): void {
   if (!design) return;
   document.title = `${design.name} · Bench`;
-  $<HTMLAnchorElement>("export").href = `/d/${design.id}/export.stl`;
+  $<HTMLElement>("doc-title").textContent = design.name;
+  $<HTMLAnchorElement>("export").href = `/${viewing ? "v" : "d"}/${design.id}/export.stl`;
+  // into this browser's list of projects (never the server's), with the edit
+  // link only if this is it; the example is everyone's, so it is not yours
+  if (links && designId !== EXAMPLE_ID) {
+    remember({
+      id: access === "edit" ? designId : undefined,
+      // the link is a path, /v/<view>; the list keeps the id
+      view: links.view.split("/").pop() ?? links.view,
+      name: design.name,
+      access,
+      opened: Date.now(),
+      features: features.size,
+    });
+  }
 }
 
 // ---------- edits ----------
@@ -549,6 +599,7 @@ function updateButtons(): void {
 
 let lastHold = "";
 function sendHold(force = false): void {
+  if (access === "view") return; // a viewer holds nothing
   const ids = [...selection].sort();
   const key = ids.join(",");
   if (key === lastHold && !force) return;
@@ -875,7 +926,7 @@ function syncGizmo(): void {
     return;
   }
   const f = movable();
-  if (!moving || !f || looking() || !live) {
+  if (!moving || !f || looking() || !live || access === "view") {
     vp.gizmo.detach();
     vp.schedule();
     return;
@@ -1073,7 +1124,7 @@ let slide: {
 const viewportEl = $<HTMLElement>("viewport");
 
 vp.canvas.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || mode.kind !== "select" || !live || looking()) return;
+  if (e.button !== 0 || mode.kind !== "select" || !live || looking() || access === "view") return;
   if (vp.gizmo.axis) return; // on a gizmo handle: the gizmo has it
   const hit = vp.pick(e);
   const f = hit?.id ? features.get(hit.id) : undefined;
@@ -1620,9 +1671,11 @@ function renderBanner(): void {
   banner.hidden = !text;
   banner.textContent = text;
   document.body.classList.toggle("sketching", mode.kind === "sketch" && mode.stage === "draw");
-  $<HTMLElement>("groups-solid").hidden = mode.kind === "sketch" && mode.stage === "draw";
-  $<HTMLElement>("groups-sketch").hidden = !(mode.kind === "sketch" && mode.stage === "draw");
-  $<HTMLElement>("tab-sketch").hidden = !(mode.kind === "sketch" && mode.stage === "draw");
+  const sketching = mode.kind === "sketch" && mode.stage === "draw";
+  for (const r of ["solid", "parts", "simulate"] as const) $<HTMLElement>(`groups-${r}`).hidden = sketching || ribbon !== r;
+  $<HTMLElement>("groups-sketch").hidden = !sketching;
+  $<HTMLElement>("tab-sketch").hidden = !sketching;
+  for (const t of modeTabs) t.setAttribute("aria-selected", String(!sketching && t.dataset.mode === ribbon));
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-sketch]")) {
     b.setAttribute("aria-pressed", String(mode.kind === "sketch" && mode.stage === "draw" && mode.tool === b.dataset.sketch));
   }
@@ -2649,16 +2702,63 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("[data-start]")) {
   b.addEventListener("click", () => command(b.dataset.start ?? ""));
 }
 
-const helpButton = $<HTMLButtonElement>("help-button");
-const helpList = $<HTMLElement>("help-list");
-function setHelp(open: boolean): void {
-  helpList.hidden = !open;
-  helpButton.setAttribute("aria-expanded", String(open));
+// a button that opens a little list under it; a press anywhere else, or
+// Escape, closes it
+function menu(buttonId: string, listId: string): (open: boolean) => void {
+  const button = $<HTMLButtonElement>(buttonId);
+  const list = $<HTMLElement>(listId);
+  const set = (open: boolean): void => {
+    list.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+  };
+  button.addEventListener("click", () => set(list.hidden === true));
+  document.addEventListener("pointerdown", (e) => {
+    if (!list.hidden && !(e.target as Element).closest(".menu")?.contains(button)) set(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !list.hidden) {
+      set(false);
+      button.focus();
+    }
+  });
+  // choosing something closes it
+  list.addEventListener("click", (e) => {
+    if ((e.target as Element).closest("button, a")) set(false);
+  });
+  return set;
 }
-helpButton.addEventListener("click", () => setHelp(helpList.hidden === true));
-document.addEventListener("pointerdown", (e) => {
-  if (!helpList.hidden && !(e.target as Element).closest(".helpmenu")) setHelp(false);
+const setHelp = menu("help-button", "help-list");
+menu("file-button", "file-list");
+
+const renameDialog = $<HTMLDialogElement>("rename-dialog");
+const renameInput = $<HTMLInputElement>("rename-input");
+$<HTMLButtonElement>("file-rename").addEventListener("click", () => {
+  if (!canEdit()) return;
+  renameInput.value = $<HTMLElement>("doc-title").textContent ?? "";
+  renameDialog.showModal();
+  renameInput.select();
 });
+$<HTMLButtonElement>("rename-cancel").addEventListener("click", () => renameDialog.close());
+$<HTMLFormElement>("rename-form").addEventListener("submit", () => {
+  const name = cleanName(renameInput.value);
+  if (name && canEdit()) send({ t: "rename", name });
+});
+$<HTMLButtonElement>("file-new").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/designs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: me ? `${me.name}'s design` : "New design" }),
+    });
+    const body = (await res.json()) as { id?: string; error?: string };
+    if (!res.ok || !body.id) throw new Error(body.error ?? "the design could not be made");
+    location.href = `/d/${body.id}`;
+  } catch (err) {
+    say(`Could not make a new design: ${(err as Error).message}`, true);
+  }
+});
+$<HTMLButtonElement>("file-import").addEventListener("click", () => command("import"));
+$<HTMLButtonElement>("file-share").addEventListener("click", () => $<HTMLButtonElement>("share").click());
 $<HTMLButtonElement>("tour-again").addEventListener("click", () => {
   setHelp(false);
   beginTour();
@@ -2674,6 +2774,8 @@ $<HTMLButtonElement>("empty-tour").addEventListener("click", beginTour);
 function beginTour(): void {
   if (tourRunning()) return;
   cancelMode();
+  // the tour points at Solid's tools
+  if (ribbon !== "solid") setRibbon("solid");
   const touch = matchMedia("(pointer: coarse)").matches;
   const q = (sel: string) => () => document.querySelector(sel);
   const mine = () => [...features.values()].filter((f) => f.by === me?.id && isBodyFeature(f));
@@ -2727,18 +2829,117 @@ function beginTour(): void {
         : "Drag empty space to turn the view, right-drag to pan, scroll to zoom. The cube in the corner jumps to front, top and side views. F fits the whole part.",
     },
     {
-      target: q(".people"),
+      target: q("#share"),
       title: "Working together",
-      body: "Everyone in this design shows here. Their pointers, and anything they're holding, appear in their colour. Click someone to follow their view. Nobody can change a body you're holding.",
+      body: "Share gives you two links: one to build this with you, one to only watch. Everyone who joins shows beside it, and their pointers, and anything they're holding, appear in their colour. Click someone to follow their view. Nobody can change a body you're holding.",
     },
     {
       target: q(".timeline"),
       title: "Undo, history and printing",
-      body: "Every step is kept in order along the bottom; step back through it to see how the part was made. Undo takes back your own changes. STL in the ribbon downloads the part for a 3D printer. The ? up top brings this tour back.",
+      body: "Every step is kept in order along the bottom; step back through it to see how the part was made. Undo takes back your own changes. Undo is up by File, and Export STL in the File menu downloads the part for a 3D printer. The ? up top brings this tour back.",
     },
   ];
   startTour(steps, () => say("That's the tour. The ? at the top has it again, and the keys."));
 }
+
+// ---------- sharing ----------
+// Bench is for building together, so it keeps offering the way to bring
+// someone in: a Share button with both links, and, when you are alone in a
+// design you can edit, a note sliding down from the top with the link.
+
+const shareDialog = $<HTMLDialogElement>("share-dialog");
+const linkUrl = (path: string) => new URL(path, location.origin).toString();
+
+// The clipboard API needs a secure page; on a plain-http address (a phone on
+// the same Wi-Fi) the old way still works.
+async function copy(text: string, button: HTMLButtonElement): Promise<void> {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    const t = document.createElement("textarea");
+    t.value = text;
+    t.setAttribute("readonly", "");
+    t.className = "visually-hidden";
+    document.body.append(t);
+    t.select();
+    ok = document.execCommand("copy");
+    t.remove();
+  }
+  const was = button.textContent;
+  button.textContent = ok ? "Copied" : "Select and copy";
+  button.classList.toggle("copied", ok);
+  setTimeout(() => {
+    button.textContent = was;
+    button.classList.remove("copied");
+  }, 1800);
+}
+
+function renderShare(): void {
+  if (!links) return;
+  const editRow = $<HTMLElement>("share-edit");
+  editRow.hidden = !links.edit;
+  if (links.edit) $<HTMLInputElement>("share-edit-url").value = linkUrl(links.edit);
+  $<HTMLInputElement>("share-view-url").value = linkUrl(links.view);
+  $<HTMLElement>("share-note").textContent =
+    access === "edit"
+      ? "Anyone with the edit link can change this design with you, live. Anyone with the view link can watch, point, follow your view and export the STL, but not change anything."
+      : "You're viewing. You can pass on this view link; to change the design, ask whoever shared it for the edit link.";
+}
+
+for (const [button, input] of [["share-edit-copy", "share-edit-url"], ["share-view-copy", "share-view-url"]] as const) {
+  $<HTMLButtonElement>(button).addEventListener("click", (e) => copy($<HTMLInputElement>(input).value, e.currentTarget as HTMLButtonElement));
+}
+for (const id of ["share-edit-url", "share-view-url"]) {
+  $<HTMLInputElement>(id).addEventListener("focus", (e) => (e.currentTarget as HTMLInputElement).select());
+}
+$<HTMLButtonElement>("share").addEventListener("click", () => {
+  renderShare();
+  hideInvite(false);
+  shareDialog.showModal();
+});
+
+// the invite: only to someone who can edit, only while they are alone, not
+// over the tour, and not again in this tab once they have closed it
+const invite = $<HTMLElement>("invite");
+const inviteKey = `bench.invite.${designId}`;
+let inviteTimer = 0;
+function inviteDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(inviteKey) === "closed";
+  } catch {
+    return false;
+  }
+}
+function hideInvite(forGood: boolean): void {
+  invite.classList.remove("shown");
+  if (forGood) {
+    try {
+      sessionStorage.setItem(inviteKey, "closed");
+    } catch {
+      // no storage: it may come back next visit
+    }
+  }
+}
+function considerInvite(): void {
+  clearTimeout(inviteTimer);
+  const alone = online.size <= 1;
+  if (!alone || access !== "edit" || !links?.edit || inviteDismissed()) return hideInvite(false);
+  inviteTimer = window.setTimeout(() => {
+    if (online.size <= 1 && !tourRunning() && !shareDialog.open && !dialog.open) invite.classList.add("shown");
+    else if (online.size <= 1) considerInvite();
+  }, 6000);
+}
+$<HTMLButtonElement>("invite-copy").addEventListener("click", (e) => {
+  if (links?.edit) copy(linkUrl(links.edit), e.currentTarget as HTMLButtonElement);
+});
+$<HTMLButtonElement>("invite-share").addEventListener("click", () => {
+  hideInvite(false);
+  renderShare();
+  shareDialog.showModal();
+});
+$<HTMLButtonElement>("invite-close").addEventListener("click", () => hideInvite(true));
 
 // ---------- people ----------
 
@@ -2751,7 +2952,7 @@ function askName(): void {
 $<HTMLFormElement>("name-form").addEventListener("submit", () => {
   const name = cleanName(dialogInput.value);
   if (!name) return;
-  store("bench.name", name);
+  setGuestName(name);
   send({ t: "name", name });
 });
 meButton.addEventListener("click", askName);
@@ -2783,10 +2984,16 @@ function stopFollowing(): void {
   refresh();
 }
 
+// On a phone the top bar has room for two faces; the rest are a count, as
+// they are past eight on a desktop, so the bar never pushes Undo off screen.
+const narrow = matchMedia("(max-width: 760px)");
+narrow.addEventListener("change", () => renderPeople());
+
 function renderPeople(): void {
   const others = [...online.values()].filter((p) => p.id !== me?.id);
+  const room = narrow.matches ? 2 : 8;
   peopleList.replaceChildren(
-    ...others.slice(0, 8).map((p) => {
+    ...others.slice(0, room).map((p) => {
       const li = document.createElement("li");
       const b = document.createElement("button");
       b.type = "button";
@@ -2803,10 +3010,11 @@ function renderPeople(): void {
       return li;
     }),
   );
-  if (others.length > 8) {
+  if (others.length > room) {
     const li = document.createElement("li");
     li.className = "more";
-    li.textContent = `+${others.length - 8}`;
+    li.textContent = `+${others.length - room}`;
+    li.title = others.slice(room).map((p) => p.name).join(", ");
     peopleList.append(li);
   }
 }
