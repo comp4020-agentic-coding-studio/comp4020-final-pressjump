@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Bench · 3D CAD you build together</title>
-    <meta name="description" content="Bench is 3D CAD for a few people at once: same model, same moment, a part at the end. Free, in the browser, no sign-up." />
+    <meta name="description" content="Bench is 3D CAD for a few people at once: same model, same moment, a part at the end. Free, in the browser; join a shared design without signing up." />
     <meta name="theme-color" content="#0c66e4" />
     <link rel="icon" href="/favicon.svg" />
     <link rel="stylesheet" href="/home.css" />
@@ -24,21 +24,23 @@
           <a href="#community">Community</a>
           <a href="/readme/">Why Bench</a>
         </nav>
-        <a class="btn btn-primary btn-sm for-new" href="#top">Start a design</a>
+        <div class="nav-me for-new">
+          <a class="btn btn-ghost btn-sm" href="/signin">Sign in</a>
+          <a class="btn btn-primary btn-sm" href="/signup">Create account</a>
+        </div>
         <div class="nav-me for-known">
-          <button type="button" class="btn btn-ghost btn-sm projects-button" data-open-projects>My projects<span class="count" id="project-count"></span></button>
+          <a class="btn btn-ghost btn-sm projects-button" href="/projects">My projects</a>
           <div class="profile">
             <button type="button" id="profile-button" class="profile-button" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu">
               <span class="pav" aria-hidden="true"></span><span class="pname guest-name"><!--guest--></span>
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <div id="profile-menu" class="profile-menu" hidden>
-              <div class="pm-head"><span class="pav big" aria-hidden="true"></span><div><b class="guest-name"><!--guest--></b><small>Guest on this browser</small></div></div>
-              <button type="button" data-open-projects>My projects</button>
+              <div class="pm-head"><span class="pav big" aria-hidden="true"></span><div><b class="guest-name"><!--guest--></b><small>Signed in</small></div></div>
+              <a href="/projects">My projects</a>
               <button type="button" data-new-design>New design</button>
-              <button type="button" id="pm-rename">Change your name</button>
               <hr />
-              <button type="button" id="pm-forget" class="pm-danger">Forget me on this browser</button>
+              <button type="button" id="pm-signout">Sign out</button>
             </div>
           </div>
         </div>
@@ -64,20 +66,18 @@
                 friend who just needs a bracket printed. Open a link and you're modelling alongside
                 everyone else in it, with every cursor, every drag and every number in plain sight.
               </p>
-              <form id="launch" class="launch">
-                <label for="launch-name" class="visually-hidden">Your name</label>
-                <input id="launch-name" name="name" required maxlength="32" autocomplete="nickname" placeholder="Your name" />
-                <button type="submit" class="btn btn-primary btn-lg">Launch Bench <span aria-hidden="true">→</span></button>
-              </form>
-              <p id="launch-error" class="launch-error" role="alert"></p>
-              <p class="launch-alt">Your name is what everyone sees on your cursor. Or <a href="#community">watch what others are building</a>, or <a href="/d/example">see the example</a> in the wind.</p>
+              <div class="known-buttons">
+                <a class="btn btn-primary btn-lg" href="/signup">Create a free account <span aria-hidden="true">→</span></a>
+                <a class="btn btn-ghost btn-lg" href="/signin">Sign in</a>
+              </div>
+              <p class="launch-alt">Someone shared a design with you? Just open their link: no account needed to join. Or <a href="#community">watch what others are building</a>, or <a href="/d/example">see the example</a> in the wind.</p>
             </div>
             <div class="for-known">
-              <p class="lede" id="known-lede">Pick up where you left off, or start something new. Your projects are kept in this browser.</p>
-              <ul id="recent" class="recent" aria-label="Your latest projects"></ul>
+              <p class="lede" id="known-lede">Pick up where you left off, or start something new.</p>
+              <ul id="recent" class="recent" aria-label="Your latest projects" hidden></ul>
               <div class="known-buttons">
                 <button type="button" class="btn btn-primary btn-lg" data-new-design>New design <span aria-hidden="true">→</span></button>
-                <button type="button" class="btn btn-ghost btn-lg" data-open-projects>All my projects</button>
+                <a class="btn btn-ghost btn-lg" href="/projects">All my projects</a>
               </div>
               <p id="known-error" class="launch-error" role="alert"></p>
             </div>
@@ -178,7 +178,7 @@
             <article class="tcard orbit-card">
               <div class="scene3d orbit-scene" data-scene="gears" role="img" aria-label="Two gears turning together, one in Sam's colour and one in Ana's"></div>
               <h3>Share the link, and they're in</h3>
-              <p>No accounts and no installs. Whoever opens it joins the room with their own name and colour.</p>
+              <p>No installs, and no account needed to join. Whoever opens it joins the room with their own name and colour.</p>
             </article>
             <article class="tcard wide-card">
               <div class="wide-head">
@@ -199,7 +199,7 @@
             </article>
           </div>
           <ol class="steps3">
-            <li class="tcard step"><div class="scene3d step-scene" data-scene="start" role="img" aria-label="A box rising from the grid as its height is typed"></div><span class="step-n">01</span><h3>Start a design</h3><p>Give it a name. That's the whole sign-up.</p></li>
+            <li class="tcard step"><div class="scene3d step-scene" data-scene="start" role="img" aria-label="A box rising from the grid as its height is typed"></div><span class="step-n">01</span><h3>Start a design</h3><p>Make a free account, and every design you start or open is kept on your projects page.</p></li>
             <li class="tcard step"><div class="scene3d step-scene" data-scene="share" role="img" aria-label="Bolts dropping into a plate, each in a different person's colour"></div><span class="step-n">02</span><h3>Share the link</h3><p>Send it to whoever you're building with. Everyone adds to the same part.</p></li>
             <li class="tcard step"><div class="scene3d step-scene" data-scene="print" role="img" aria-label="A bracket being printed layer by layer"></div><span class="step-n">03</span><h3>Model and export</h3><p>Build it together, then download the STL for the printer.</p></li>
           </ol>
@@ -250,34 +250,8 @@
       </div>
       <div class="wrap foot-base">
         <span>Bench · millimetres, Y up</span>
-        <a href="#top">Start a design</a>
+        <a href="/signup">Create an account</a>
       </div>
     </footer>
-    <dialog id="projects" class="projects" aria-labelledby="projects-h">
-      <div class="pj-head">
-        <div>
-          <h2 id="projects-h">Your projects</h2>
-          <p>Kept in this browser for <b class="guest-name"><!--guest--></b>. There's no account: clear this browser's data and the list goes, so keep the links you care about.</p>
-        </div>
-        <button type="button" class="pj-close" id="pj-close" aria-label="Close">×</button>
-      </div>
-      <div class="pj-tools">
-        <label for="pj-search" class="visually-hidden">Search your projects</label>
-        <input type="search" id="pj-search" placeholder="Search your projects" autocomplete="off" />
-        <button type="button" class="btn btn-primary" data-new-design>New design</button>
-      </div>
-      <ul id="pj-list" class="gallery pj-grid" aria-label="Your projects"></ul>
-      <p id="pj-empty" class="pj-empty" hidden></p>
-    </dialog>
-
-    <dialog id="name-dialog" class="small-dialog" aria-labelledby="name-h">
-      <form method="dialog" id="name-form">
-        <h2 id="name-h">Your name</h2>
-        <p>Everyone in a design sees it on your cursor.</p>
-        <label for="name-input" class="visually-hidden">Your name</label>
-        <input id="name-input" maxlength="32" required autocomplete="nickname" />
-        <div class="dialog-row"><button type="button" class="btn btn-ghost" id="name-cancel">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
-      </form>
-    </dialog>
   </body>
 </html>

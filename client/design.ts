@@ -31,7 +31,7 @@ import { PARTS, TURN, faceFrame, placeSteps, type PartDef, type Step as PartStep
 import { Viewport, type Display } from "./viewport.ts";
 import { PRESSURE_KEY, SPEED_KEY, Wind, type WindDir } from "./wind.ts";
 import { EXAMPLE_ID } from "../shared/example.ts";
-import { guestName, remember, setGuestName } from "./guest.ts";
+import { guestName, setGuestName } from "./guest.ts";
 import { ACCEPT, forgetImport, loadImports, placedGeometry, readModel, saveImport, standOnFloor, type Imported, type Unit } from "./importer.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
@@ -152,6 +152,21 @@ function store(key: string, value: string): void {
     // identity just will not outlive the tab
   }
 }
+
+// Whether an account is signed in here. The server already knows (it reads
+// the session cookie when the socket opens); the page asks only so it does not
+// ask an account holder for a name.
+let signedIn = false;
+fetch("/api/me")
+  .then((res) => (res.ok ? (res.json() as Promise<{ name: string }>) : null))
+  .then((me) => {
+    if (!me) return;
+    signedIn = true;
+    setGuestName(me.name);
+    // asked before the answer came: an account needs no name asked
+    if (dialog.open) dialog.close();
+  })
+  .catch(() => {});
 
 function token(): string {
   let t = stored("bench.token");
@@ -360,7 +375,8 @@ function receive(msg: ServerMessage): void {
             setTimeout(() => vp.fit(), 400);
           }, 700);
         }
-        if (!guestName()) askName();
+        // an account comes with its name; only a guest is asked for one
+        if (!guestName() && !signedIn) askName();
         if (access === "edit" && !seenTour()) {
           // after the name, if it is being asked for, so the two don't overlap
           if (dialog.open) dialog.addEventListener("close", () => setTimeout(beginTour, 300), { once: true });
@@ -479,19 +495,7 @@ function showDesign(): void {
   document.title = `${design.name} · Bench`;
   $<HTMLElement>("doc-title").textContent = design.name;
   $<HTMLAnchorElement>("export").href = `/${viewing ? "v" : "d"}/${design.id}/export.stl`;
-  // into this browser's list of projects (never the server's), with the edit
-  // link only if this is it; the example is everyone's, so it is not yours
-  if (links && designId !== EXAMPLE_ID) {
-    remember({
-      id: access === "edit" ? designId : undefined,
-      // the link is a path, /v/<view>; the list keeps the id
-      view: links.view.split("/").pop() ?? links.view,
-      name: design.name,
-      access,
-      opened: Date.now(),
-      features: features.size,
-    });
-  }
+  // a signed-in account's projects are kept by the server as it opens the design
 }
 
 // ---------- edits ----------
@@ -2750,6 +2754,10 @@ $<HTMLButtonElement>("file-new").addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: me ? `${me.name}'s design` : "New design" }),
     });
+    if (res.status === 401) {
+      location.href = `/signup?next=${encodeURIComponent(location.pathname)}`;
+      return;
+    }
     const body = (await res.json()) as { id?: string; error?: string };
     if (!res.ok || !body.id) throw new Error(body.error ?? "the design could not be made");
     location.href = `/d/${body.id}`;
