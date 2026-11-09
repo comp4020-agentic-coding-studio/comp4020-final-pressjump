@@ -31,7 +31,6 @@ const TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".ico": "image/x-icon",
   ".md": "text/plain; charset=utf-8",
-  ".wasm": "application/wasm",
   ".stl": "model/stl",
 };
 
@@ -90,20 +89,9 @@ function file(res: ServerResponse, base: string, rel: string): boolean {
   } catch {
     return false;
   }
-  send(res, 200, TYPES[extname(path)] ?? "application/octet-stream", readFileSync(path), WORKER_POLICY[rel] ?? {});
+  send(res, 200, TYPES[extname(path)] ?? "application/octet-stream", readFileSync(path));
   return true;
 }
-
-// The STEP reader is OpenCascade compiled to WebAssembly, and its loader
-// builds functions from strings. A worker runs under the policy sent with its
-// own script, so only that worker gets eval and WebAssembly: it has no page
-// to reach, loads only from here, and sees only the file someone chose.
-// Every page keeps the strict policy above.
-const WORKER_POLICY: Record<string, Record<string, string>> = {
-  "build/step-worker.js": {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self'",
-  },
-};
 
 function notFound(res: ServerResponse): void {
   const page = readFileSync(join(PUBLIC, "404.html"), "utf8");
@@ -131,7 +119,7 @@ async function body(req: IncomingMessage): Promise<unknown> {
 // the connection is not left half full for the next request.
 function tooLarge(req: IncomingMessage, res: ServerResponse): void {
   res.on("finish", () => req.destroy());
-  send(res, 413, "application/json; charset=utf-8", JSON.stringify({ error: `requests are limited to ${LIMITS.messageBytes / 1024} KB; models stay in your browser and are never uploaded` }), { Connection: "close" });
+  send(res, 413, "application/json; charset=utf-8", JSON.stringify({ error: `requests are limited to ${LIMITS.messageBytes / 1024} KB; Bench takes no files` }), { Connection: "close" });
 }
 
 const escape = (text: string): string => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

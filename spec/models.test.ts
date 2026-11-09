@@ -1,8 +1,7 @@
-// Models never live on the server. An imported model is opened in the
-// browser and kept there (client/importer.ts); the server is a small free
-// machine, and a gigabyte model sent to it would sink it. So the server has
-// no way to take one: no route accepts a file, and every message and request
-// body is capped well below the size of any real model. The example design's
+// Bench imports no models (docs/adr/0006-no-import.md), and the server must
+// never become a place to put one: it is a small free machine, and a gigabyte
+// model sent to it would sink it. So no route accepts a file, and every
+// message and request body is capped well below the size of any real model. The example design's
 // model is a file that ships with Bench, served like a script or a font.
 
 import { describe, expect, it } from "vitest";
@@ -70,15 +69,20 @@ describe("the example turbine", () => {
   });
 });
 
-describe("the STEP reader's exception", () => {
-  it("only the STEP worker may build code from strings; every page stays strict", async () => {
+describe("no importing", () => {
+  it("offers no way to open a model, and nothing anywhere may build code from strings", async () => {
     const design = await newDesign();
-    for (const path of ["/", `/d/${design.id}`, "/readme/", "/build/design.js", "/build/importer.js"]) {
+    const page = await (await fetch(new URL(`/d/${design.id}`, baseUrl))).text();
+    expect(page).not.toMatch(/Import a model|type="file"/);
+    for (const path of ["/", `/d/${design.id}`, "/readme/", "/build/design.js"]) {
       const csp = (await fetch(new URL(path, baseUrl))).headers.get("content-security-policy") ?? "";
       expect(csp, path).not.toContain("unsafe-eval");
     }
-    const worker = (await fetch(new URL("/build/step-worker.js", baseUrl))).headers.get("content-security-policy") ?? "";
-    expect(worker).toContain("'unsafe-eval'");
-    expect(worker).toContain("default-src 'self'");
+    const script = await (await fetch(new URL("/build/design.js", baseUrl))).text();
+    expect(script).not.toMatch(/\.step,|\.3mf|accept=/);
+    // the STEP reader is not shipped
+    for (const path of ["/build/step-worker.js", "/build/occt-import-js.wasm"]) {
+      expect((await fetch(new URL(path, baseUrl))).status, path).toBe(404);
+    }
   });
 });

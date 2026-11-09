@@ -147,16 +147,13 @@ note, never fakes: threads, involute gear teeth.
 - **Bounded everything.** Messages 32 KB, 400 features per design, 20 drafts
   per cursor message, 120 messages per connection per second. A limit hit is
   answered with a refusal, not a crash.
-- **Models never go to the server.** An imported file (STEP, OBJ, PLY, 3MF;
-  STL is not offered for import) is opened in the browser and kept in its IndexedDB; the server has no
-  route that takes a file, and a body over the limit is answered 413 and the
-  connection closed. So an import is visible only to whoever imported it and
-  the STL export leaves it out, and the editor says both. Never "fix" that by
-  storing or relaying models: one large upload would sink a 256 MB machine.
-- **One narrow script exception.** The STEP reader (occt-import-js, LGPL,
-  copied unmodified into `public/build/` at build) builds code from strings,
-  so `build/step-worker.js` alone is served with `'unsafe-eval'
-  'wasm-unsafe-eval'`. Every page keeps the strict policy; `spec/models`
+- **No importing, and the server takes no files.** Bench opens no model
+  files (`docs/adr/0006-no-import.md`): a model only one person could see
+  does not belong in a tool where everyone sees the same part. The server has
+  no route that takes a file, and a body over the limit is answered 413 and
+  the connection closed. Never add importing back by storing or relaying
+  models: one large upload would sink a 256 MB machine. Every script runs
+  under the strict policy, with no eval and no WebAssembly; `spec/models`
   checks both.
 - **The example is made with Bench's own tools.** `/d/example` is a wind
   turbine built from the same recipes as the ribbon (`shared/example.ts`),

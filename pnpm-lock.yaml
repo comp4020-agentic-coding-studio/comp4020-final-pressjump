@@ -42,9 +42,6 @@ importers:
       jsdom:
         specifier: ^30.1.0
         version: 30.1.0
-      occt-import-js:
-        specifier: 0.0.23
-        version: 0.0.23
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -610,9 +607,6 @@ packages:
   obug@2.2.1:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
-
-  occt-import-js@0.0.23:
-    resolution: {integrity: sha512-RFfYQXYFX5C1mB1Aywm0ShcUKzXOr/VzTnlzhBSDJOR6YCAPt1HYCzeXWg1vwwjn/cUxwqRNhhtf1dlewoZYCQ==}
 
   parse5@8.0.1:
     resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
@@ -1262,8 +1256,6 @@ snapshots:
   nanoid@3.3.19: {}
 
   obug@2.2.1: {}
-
-  occt-import-js@0.0.23: {}
 
   parse5@8.0.1:
     dependencies:
