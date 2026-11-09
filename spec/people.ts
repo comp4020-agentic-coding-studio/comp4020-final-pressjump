@@ -36,10 +36,36 @@ export const box = (over: Partial<Body> = {}): Body =>
 export const cylinder = (over: Partial<Body> = {}): Body =>
   ({ kind: "cylinder", name: "Cylinder", pos: [0, 0, 0], rot: [0, 0, 0], colour: "#8a9097", r: 5, h: 10, chamfer: 0, ...over }) as Body;
 
-export async function newDesign(name = "spec"): Promise<Design & { view: string }> {
-  const res = await fetch(new URL("/api/designs", baseUrl), {
+// An account, made fresh: its email, password and the session cookie the
+// server set, ready to send back as a Cookie header.
+export type Account = { email: string; password: string; name: string; cookie: string };
+
+export async function signUp(name = "Spec"): Promise<Account> {
+  const email = `spec-${randomBytes(6).toString("hex")}@example.com`;
+  const password = randomBytes(8).toString("hex");
+  const res = await fetch(new URL("/api/signup", baseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, name }),
+  });
+  if (res.status !== 201) throw new Error(`could not make an account: ${res.status} ${await res.text()}`);
+  return { email, password, name, cookie: sessionCookie(res) };
+}
+
+// The session cookie a response set, as a Cookie header's value.
+export function sessionCookie(res: Response): string {
+  const set = res.headers.getSetCookie().find((c) => c.startsWith("bench_session="));
+  return set ? set.split(";")[0] : "";
+}
+
+// Starting a design takes an account; the spec makes one per file, once.
+let owner: Promise<Account> | undefined;
+
+export async function newDesign(name = "spec", by?: Account): Promise<Design & { view: string }> {
+  const account = by ?? (await (owner ??= signUp("Spec owner")));
+  const res = await fetch(new URL("/api/designs", baseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: account.cookie },
     body: JSON.stringify({ name }),
   });
   if (res.status !== 201) throw new Error(`could not make a design: ${res.status}`);

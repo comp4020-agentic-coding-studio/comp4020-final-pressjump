@@ -10,6 +10,7 @@ import { WebSocketServer } from "ws";
 import { LIMITS, cleanName, pack, type Design } from "../shared/protocol.ts";
 import { EXAMPLE_ID, EXAMPLE_NAME, exampleFeatures } from "../shared/example.ts";
 import { checkReferences, validateFeature, type Stored } from "../shared/model.ts";
+import * as auth from "./auth.ts";
 import * as db from "./db.ts";
 import { toStl } from "./export.ts";
 import { onlineCounts, roomFor } from "./room.ts";
@@ -133,21 +134,40 @@ function tooLarge(req: IncomingMessage, res: ServerResponse): void {
   send(res, 413, "application/json; charset=utf-8", JSON.stringify({ error: `requests are limited to ${LIMITS.messageBytes / 1024} KB; models stay in your browser and are never uploaded` }), { Connection: "close" });
 }
 
-// The home page, greeting a returning guest by the name in their cookie, so
-// the page is right before any script runs. The cookie is the browser's own
-// note of what it called itself; the server keeps nothing of it.
-function homePage(req: IncomingMessage): string {
+const escape = (text: string): string => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+// The home page, greeting someone signed in by their account's name, so the
+// page is right before any script runs.
+function homePage(user: db.User | undefined): string {
   const page = readFileSync(join(PUBLIC, "index.html"), "utf8");
-  const raw = (req.headers.cookie ?? "").split(/;\s*/).find((c) => c.startsWith("bench_guest="));
-  let name = "";
+  if (!user) return page;
+  return page.replace('<body class="land">', '<body class="land known">').replaceAll("<!--guest-->", escape(user.name));
+}
+
+// /projects, with the account's name and email in it before any script runs
+function projectsPage(user: db.User): string {
+  const page = readFileSync(join(PUBLIC, "projects.html"), "utf8");
+  return page.replaceAll("<!--name-->", escape(user.name)).replaceAll("<!--email-->", escape(user.email));
+}
+
+// Where to go after signing in: a path on this site, never another one.
+function nextPath(raw: string | null): string {
+  return raw && /^\/(?!\/)[\w\-./#?=&]*$/.test(raw) ? raw : "/projects";
+}
+
+// A JSON object from a request body, or undefined once the refusal is sent.
+async function readJson(req: IncomingMessage, res: ServerResponse): Promise<Record<string, unknown> | undefined> {
   try {
-    name = raw ? cleanName(decodeURIComponent(raw.slice("bench_guest=".length))) : "";
-  } catch {
-    name = "";
+    const value = await body(req);
+    if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
+  } catch (err) {
+    if (err instanceof TooLarge) {
+      tooLarge(req, res);
+      return undefined;
+    }
   }
-  if (!name) return page;
-  const safe = name.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  return page.replace('<body class="land">', '<body class="land known">').replaceAll("<!--guest-->", safe);
+  json(res, 400, { error: "send a JSON object" });
+  return undefined;
 }
 
 function slug(name: string): string {
@@ -167,7 +187,98 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://local");
   const path = url.pathname;
   try {
-    if (req.method === "GET" && path === "/") return send(res, 200, TYPES[".html"], homePage(req), { Vary: "Cookie" });
+    const user = auth.userOf(req);
+    if (req.method === "GET" && path === "/") return send(res, 200, TYPES[".html"], homePage(user), { Vary: "Cookie" });
+
+    // ---- accounts: see server/auth.ts and docs/adr/0005-accounts.md
+    if (req.method === "GET" && (path === "/signin" || path === "/signup")) {
+      if (user) return send(res, 302, "text/plain", "", { Location: nextPath(url.searchParams.get("next")) });
+      const page = readFileSync(join(PUBLIC, "account.html"), "utf8");
+      return send(res, 200, TYPES[".html"], path === "/signup" ? page.replace('<body class="account">', '<body class="account signup">') : page);
+    }
+    if (req.method === "GET" && (path === "/projects" || path === "/projects/")) {
+      if (!user) return send(res, 302, "text/plain", "", { Location: "/signin?next=/projects" });
+      return send(res, 200, TYPES[".html"], projectsPage(user), { Vary: "Cookie" });
+    }
+    if (path.startsWith("/api/") && req.method !== "GET" && !auth.sameOrigin(req)) {
+      return json(res, 403, { error: "that request came from another site" });
+    }
+    if (path === "/api/signup" && req.method === "POST") {
+      if (auth.blocked(req, "signup", auth.MAX_SIGNUPS)) return json(res, 429, { error: "too many new accounts from here in the last minute; wait a minute and try again" });
+      const input = await readJson(req, res);
+      if (!input) return;
+      const form = auth.readSignup(input);
+      if (typeof form === "string") return json(res, 400, { error: form });
+      auth.note(req, "signup");
+      const made = await auth.signUp(form.email, form.password, form.name);
+      if (typeof made === "string") return json(res, 409, { error: made });
+      return send(res, 201, "application/json; charset=utf-8", JSON.stringify({ name: made.name, email: made.email }), {
+        "Set-Cookie": auth.startSession(req, made.id),
+      });
+    }
+    if (path === "/api/signin" && req.method === "POST") {
+      const input = await readJson(req, res);
+      if (!input) return;
+      const kind = `signin|${auth.cleanEmail(input.email)}`;
+      if (auth.blocked(req, kind, auth.MAX_FAILED_SIGNINS)) return json(res, 429, { error: "too many wrong passwords for that email; wait a minute and try again" });
+      const found = await auth.signIn(String(input.email ?? ""), typeof input.password === "string" ? input.password : "");
+      if (!found) {
+        auth.note(req, kind);
+        return json(res, 401, { error: "that email and password do not match an account" });
+      }
+      return send(res, 200, "application/json; charset=utf-8", JSON.stringify({ name: found.name, email: found.email }), {
+        "Set-Cookie": auth.startSession(req, found.id),
+      });
+    }
+    if (path === "/api/signout" && req.method === "POST") {
+      return send(res, 200, "application/json; charset=utf-8", "{}", { "Set-Cookie": auth.endSession(req) });
+    }
+    if (path === "/api/me" && req.method === "GET") {
+      if (!user) return json(res, 401, { error: "not signed in" });
+      return json(res, 200, { name: user.name, email: user.email });
+    }
+
+    // An account's projects: the designs it made and the ones it opened, each
+    // with the link it was given (the edit link only if it had it).
+    if (path === "/api/projects" && req.method === "GET") {
+      if (!user) return json(res, 401, { error: "sign in to see your projects" });
+      const online = onlineCounts();
+      return json(
+        res,
+        200,
+        db.projectsOf(user.id).map((p) => ({
+          link: p.access === "edit" ? `/d/${p.id}` : `/v/${p.view}`,
+          view: p.view,
+          name: p.name,
+          access: p.access,
+          mine: !!p.mine,
+          opened: p.opened,
+          updated: p.updated,
+          features: p.features,
+          online: online.get(p.id) ?? 0,
+        })),
+      );
+    }
+    // Add a design to your projects by a link you hold (say one kept from
+    // before there were accounts): an edit link adds it to edit, a view link
+    // to watch, as opening it would.
+    if (path === "/api/projects" && req.method === "POST") {
+      if (!user) return json(res, 401, { error: "sign in to keep projects" });
+      const input = await readJson(req, res);
+      if (!input) return;
+      const m = String(input.link ?? "").match(/\/(d|v)\/([A-Za-z0-9]{1,20})\/?$/);
+      const design = m ? (m[1] === "d" ? db.getDesign(m[2]) : db.getDesignByView(m[2])) : undefined;
+      if (!m || !design) return json(res, 404, { error: "no design has that link" });
+      if (design.id === EXAMPLE_ID) return json(res, 400, { error: "the example is everyone's, so it is not kept in anyone's projects" });
+      db.markOpened(user.id, design.id, m[1] === "d" ? "edit" : "view");
+      return json(res, 201, { view: db.viewOf(design.id) });
+    }
+    const forget = path.match(/^\/api\/projects\/([A-Za-z0-9]{1,20})$/);
+    if (forget && req.method === "DELETE") {
+      if (!user) return json(res, 401, { error: "sign in to change your projects" });
+      db.forgetProject(user.id, forget[1]);
+      return json(res, 200, {});
+    }
     if (req.method === "GET" && path === "/readme") return send(res, 301, "text/plain", "", { Location: "/readme/" });
     if (req.method === "GET" && path === "/readme/") return send(res, 200, TYPES[".html"], readmePage());
     if (req.method === "GET" && path.startsWith("/readme/docs/")) {
@@ -193,18 +304,15 @@ const server = createServer(async (req, res) => {
         })),
       );
     }
+    // Starting a design takes an account; joining one by its link does not.
     if (path === "/api/designs" && req.method === "POST") {
-      let input: { name?: unknown };
-      try {
-        input = (await body(req)) as typeof input;
-      } catch (err) {
-        if (err instanceof TooLarge) return tooLarge(req, res);
-        return json(res, 400, { error: "send a JSON object" });
-      }
+      if (!user) return json(res, 401, { error: "sign in or create an account to start a design; anyone can join one by its link" });
+      const input = await readJson(req, res);
+      if (!input) return;
       const name = cleanName(input.name);
       if (!name) return json(res, 400, { error: "a design needs a name" });
       const design: Design = { id: newId(), name };
-      const view = db.addDesign(design);
+      const view = db.addDesign(design, user.id);
       return json(res, 201, { ...design, view });
     }
 
@@ -271,7 +379,8 @@ server.on("upgrade", (req, socket, head) => {
       ws.ping();
     }, 25_000);
     ws.on("close", () => clearInterval(ping));
-    roomFor(design).join(ws, viewing ? "view" : "edit");
+    // a socket opened by another site's page is a guest, whatever cookie it carries
+    roomFor(design).join(ws, viewing ? "view" : "edit", auth.sameOrigin(req) ? auth.userOf(req) : undefined);
   });
 });
 

@@ -2,7 +2,7 @@
 // the people in it. A limit that is hit gets an answer, never a crash.
 
 import { expect, it } from "vitest";
-import { baseUrl, newDesign, token, visit } from "./people.ts";
+import { baseUrl, newDesign, signUp, token, visit } from "./people.ts";
 
 it("closes a connection that floods it, and keeps serving everyone else", async () => {
   const design = await newDesign();
@@ -16,9 +16,10 @@ it("closes a connection that floods it, and keeps serving everyone else", async 
 });
 
 it("refuses a design with no name", async () => {
+  const { cookie } = await signUp();
   const res = await fetch(new URL("/api/designs", baseUrl), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify({ name: "   " }),
   });
   expect(res.status).toBe(400);
@@ -32,8 +33,10 @@ it("answers 404 for a design that does not exist, page, export and socket alike"
 
 it("loads nothing from anywhere but itself", async () => {
   const design = await newDesign();
-  for (const path of ["/", `/d/${design.id}`, "/readme/"]) {
-    const res = await fetch(new URL(path, baseUrl));
+  const { cookie } = await signUp();
+  for (const path of ["/", `/d/${design.id}`, "/readme/", "/signin", "/signup", "/projects"]) {
+    const res = await fetch(new URL(path, baseUrl), { headers: path === "/projects" ? { Cookie: cookie } : {} });
+    expect(res.status, path).toBe(200);
     expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
     const html = await res.text();
     expect(html).not.toMatch(/(src|href)="(https?:)?\/\//);

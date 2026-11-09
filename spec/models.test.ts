@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { EXAMPLE_ID, exampleFeatures } from "../shared/example.ts";
 import { checkReferences, validateFeature, type Feature, type Stored } from "../shared/model.ts";
 import { LIMITS } from "../shared/protocol.ts";
-import { baseUrl, id, newDesign, readStl, stored, visit } from "./people.ts";
+import { baseUrl, id, newDesign, readStl, signUp, stored, visit } from "./people.ts";
 
 // a model-sized payload: a few thousand triangles of numbers
 const bulk = () => Array.from({ length: 30_000 }, (_, i) => i * 1.5);
@@ -24,13 +24,14 @@ describe("models are never kept by the server", () => {
     expect(await stored(design.id)).toEqual([]);
   });
 
-  it("refuses a model-sized request body", async () => {
+  it("refuses a model-sized request body, even from an account", async () => {
+    const { cookie } = await signUp();
     const res = await fetch(new URL("/api/designs", baseUrl), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ name: "Big", mesh: bulk() }),
     });
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBe(413);
   });
 
   it("has nowhere to put a file", async () => {

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
-    "build": "esbuild client/home.ts client/landing3d.ts client/design.ts client/wind-worker.ts client/thumb-worker.ts --bundle --format=esm --target=es2022 --minify --sourcemap --outdir=public/build --log-override:direct-eval=silent && esbuild client/step-worker.ts --bundle --format=iife --target=es2022 --minify --outdir=public/build && node scripts/copy-occt.ts",
+    "build": "esbuild client/home.ts client/account.ts client/projects.ts client/landing3d.ts client/design.ts client/wind-worker.ts client/thumb-worker.ts --bundle --format=esm --target=es2022 --minify --sourcemap --outdir=public/build --log-override:direct-eval=silent && esbuild client/step-worker.ts --bundle --format=iife --target=es2022 --minify --outdir=public/build && node scripts/copy-occt.ts",
     "start": "node server/main.ts",
     "dev": "pnpm build && node --watch server/main.ts",
     "typecheck": "tsc --noEmit",

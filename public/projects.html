@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your projects · Bench</title>
+    <meta name="theme-color" content="#0c66e4" />
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/home.css" />
+    <script type="module" src="/build/projects.js"></script>
+  </head>
+  <body class="land known projects-page">
+    <header class="nav">
+      <div class="wrap nav-row">
+        <a class="brand" href="/" aria-label="Bench home">
+          <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0c66e4"/><path d="M7 24 L25 8 M7 8 h6 M7 8 v6 M25 24 h-6 M25 24 v-6" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+          <span>Bench</span>
+        </a>
+        <nav class="links" aria-label="Sections">
+          <a href="/projects" aria-current="page">Projects</a>
+          <a href="/#community">Community</a>
+          <a href="/readme/">Why Bench</a>
+        </nav>
+        <div class="nav-me">
+          <div class="profile">
+            <button type="button" id="profile-button" class="profile-button" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu">
+              <span class="pav" aria-hidden="true"></span><span class="pname account-name"><!--name--></span>
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="profile-menu" class="profile-menu" hidden>
+              <div class="pm-head"><span class="pav big" aria-hidden="true"></span><div><b class="account-name"><!--name--></b><small><!--email--></small></div></div>
+              <button type="button" data-new-design>New design</button>
+              <a href="/#community">Community designs</a>
+              <hr />
+              <button type="button" id="pm-signout">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap pj-page">
+      <div class="pj-head">
+        <div>
+          <h1 id="projects-h">Your projects</h1>
+          <p>Every design you have made or opened while signed in as <b class="account-name"><!--name--></b>, on any device.</p>
+        </div>
+      </div>
+      <div class="pj-tools">
+        <label for="pj-search" class="visually-hidden">Search your projects</label>
+        <input type="search" id="pj-search" placeholder="Search your projects" autocomplete="off" />
+        <div class="pj-filter" role="group" aria-label="Show">
+          <button type="button" class="seg" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" class="seg" data-filter="mine" aria-pressed="false">Made by you</button>
+          <button type="button" class="seg" data-filter="shared" aria-pressed="false">Shared with you</button>
+        </div>
+        <button type="button" class="btn btn-primary" data-new-design>New design</button>
+      </div>
+      <p id="pj-error" class="error" role="alert"></p>
+      <p id="pj-status" class="muted" role="status">Loading your projects…</p>
+      <ul id="pj-list" class="gallery pj-grid" aria-labelledby="projects-h"></ul>
+      <p id="pj-empty" class="pj-empty" hidden></p>
+
+      <section id="pj-import" class="pj-import" hidden aria-labelledby="pj-import-h">
+        <h2 id="pj-import-h">Designs this browser remembers</h2>
+        <p id="pj-import-text"></p>
+        <div class="dialog-row"><button type="button" class="btn btn-ghost" id="pj-import-skip">Not now</button><button type="button" class="btn btn-primary" id="pj-import-go">Add them</button></div>
+      </section>
+    </main>
+  </body>
+</html>

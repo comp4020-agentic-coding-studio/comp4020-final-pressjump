@@ -112,3 +112,21 @@ export function forgetProject(view: string): void {
 export function projectLink(p: Project): string {
   return p.id ? `/d/${p.id}` : `/v/${p.view}`;
 }
+
+// The links of the designs this browser listed before accounts, edit links
+// where it had them.
+export function oldProjects(): string[] {
+  try {
+    const list = JSON.parse(read(PROJECTS_KEY) ?? "[]") as Project[];
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((p) => p && typeof p.view === "string")
+      .map((p) => (p.id ? `/d/${p.id}` : `/v/${p.view.split("/").pop()}`));
+  } catch {
+    return [];
+  }
+}
+
+export function forgetOldProjects(): void {
+  write(PROJECTS_KEY, null);
+}

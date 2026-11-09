@@ -49,6 +49,36 @@ for (const row of db.prepare(`SELECT id FROM designs WHERE view IS NULL`).all() 
   db.prepare(`UPDATE designs SET view = ? WHERE id = ?`).run(viewId(), row.id);
 }
 
+// Accounts: an email, a password kept only as a scrypt hash, and the name
+// shown on the cursor. A session is a random token in an HttpOnly cookie; only
+// its hash is stored, so the table cannot be used to sign in as anyone.
+// `opened` is each account's list of projects: the designs it made and the
+// ones it has opened, with how far it may go in each. Guests opening a link
+// leave nothing here.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    created INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    hash TEXT PRIMARY KEY,
+    user TEXT NOT NULL,
+    expires INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS opened (
+    user TEXT NOT NULL,
+    design TEXT NOT NULL,
+    access TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (user, design)
+  );
+`);
+if (!columns.some((c) => c.name === "owner")) db.exec(`ALTER TABLE designs ADD COLUMN owner TEXT`);
+db.prepare(`DELETE FROM sessions WHERE expires < ?`).run(Date.now());
+
 type DesignRow = { id: string; view: string; name: string; updated: number; features: number };
 
 const q = {
@@ -59,7 +89,7 @@ const q = {
   design: db.prepare(`SELECT id, name FROM designs WHERE id = ?`),
   byView: db.prepare(`SELECT id, name FROM designs WHERE view = ?`),
   viewOf: db.prepare(`SELECT view FROM designs WHERE id = ?`),
-  addDesign: db.prepare(`INSERT INTO designs (id, name, created, updated, view) VALUES (?, ?, ?, ?, ?)`),
+  addDesign: db.prepare(`INSERT INTO designs (id, name, created, updated, view, owner) VALUES (?, ?, ?, ?, ?, ?)`),
   renameDesign: db.prepare(`UPDATE designs SET name = ?, updated = ? WHERE id = ?`),
   touch: db.prepare(`UPDATE designs SET updated = ? WHERE id = ?`),
   features: db.prepare(`SELECT id, seq, v, by, body FROM features WHERE design = ? ORDER BY seq`),
@@ -70,6 +100,25 @@ const q = {
   del: db.prepare(`DELETE FROM features WHERE design = ? AND id = ?`),
   person: db.prepare(`SELECT id, name FROM people WHERE id = ?`),
   putPerson: db.prepare(`INSERT INTO people (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name`),
+  addUser: db.prepare(`INSERT INTO users (id, email, name, hash, created) VALUES (?, ?, ?, ?, ?)`),
+  userByEmail: db.prepare(`SELECT id, email, name, hash FROM users WHERE email = ?`),
+  user: db.prepare(`SELECT id, email, name FROM users WHERE id = ?`),
+  renameUser: db.prepare(`UPDATE users SET name = ? WHERE id = ?`),
+  addSession: db.prepare(`INSERT INTO sessions (hash, user, expires) VALUES (?, ?, ?)`),
+  session: db.prepare(`SELECT user FROM sessions WHERE hash = ? AND expires > ?`),
+  dropSession: db.prepare(`DELETE FROM sessions WHERE hash = ?`),
+  // an edit link once recorded is kept, even if the design is later opened by its view link
+  open: db.prepare(
+    `INSERT INTO opened (user, design, access, at) VALUES (?, ?, ?, ?)
+     ON CONFLICT (user, design) DO UPDATE SET at = excluded.at,
+       access = CASE WHEN opened.access = 'edit' THEN 'edit' ELSE excluded.access END`,
+  ),
+  forget: db.prepare(`DELETE FROM opened WHERE user = ? AND design = (SELECT id FROM designs WHERE view = ?)`),
+  projects: db.prepare(
+    `SELECT d.id, d.view, d.name, d.updated, o.access, o.at AS opened, d.owner = o.user AS mine,
+       (SELECT COUNT(*) FROM features WHERE design = d.id) AS features
+     FROM opened o JOIN designs d ON d.id = o.design WHERE o.user = ? ORDER BY o.at DESC LIMIT 500`,
+  ),
 };
 
 export function listDesigns(): DesignRow[] {
@@ -81,11 +130,13 @@ export function getDesign(id: string): Design | undefined {
   return q.design.get(id) as Design | undefined;
 }
 
-// a new design, with its view-only link's id
-export function addDesign(design: Design): string {
+// a new design, with its view-only link's id; an account that makes one
+// owns it and has it in its projects from the start
+export function addDesign(design: Design, owner: string | null = null): string {
   const now = Date.now();
   const view = viewId();
-  q.addDesign.run(design.id, design.name, now, now, view);
+  q.addDesign.run(design.id, design.name, now, now, view, owner);
+  if (owner) q.open.run(owner, design.id, "edit", now);
   return view;
 }
 
@@ -126,6 +177,50 @@ export function getPerson(id: string): { id: string; name: string } | undefined 
 
 export function putPerson(id: string, name: string): void {
   q.putPerson.run(id, name);
+}
+
+export type User = { id: string; email: string; name: string };
+
+export function addUser(id: string, email: string, name: string, hash: string): void {
+  q.addUser.run(id, email, name, hash, Date.now());
+}
+
+export function userByEmail(email: string): (User & { hash: string }) | undefined {
+  return q.userByEmail.get(email) as (User & { hash: string }) | undefined;
+}
+
+export function getUser(id: string): User | undefined {
+  return q.user.get(id) as User | undefined;
+}
+
+export function renameUser(id: string, name: string): void {
+  q.renameUser.run(name, id);
+}
+
+export function addSession(hash: string, user: string, expires: number): void {
+  q.addSession.run(hash, user, expires);
+}
+
+export function sessionUser(hash: string): string | undefined {
+  return (q.session.get(hash, Date.now()) as { user: string } | undefined)?.user;
+}
+
+export function dropSession(hash: string): void {
+  q.dropSession.run(hash);
+}
+
+export function markOpened(user: string, design: string, access: "edit" | "view"): void {
+  q.open.run(user, design, access, Date.now());
+}
+
+export function forgetProject(user: string, view: string): void {
+  q.forget.run(user, view);
+}
+
+export type ProjectRow = { id: string; view: string; name: string; updated: number; access: "edit" | "view"; opened: number; mine: number; features: number };
+
+export function projectsOf(user: string): ProjectRow[] {
+  return q.projects.all(user) as ProjectRow[];
 }
 
 export function close(): void {

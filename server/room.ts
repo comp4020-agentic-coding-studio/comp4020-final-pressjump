@@ -30,12 +30,16 @@ import {
   type Reason,
   type ServerMessage,
 } from "../shared/protocol.ts";
+import { EXAMPLE_ID } from "../shared/example.ts";
 import * as db from "./db.ts";
 
 type Conn = {
   ws: WebSocket;
   // what the link this connection came in by lets it do
   access: Access;
+  // the account signed in on this connection, if any: it is the person, and
+  // the design goes into its projects
+  user: db.User | undefined;
   person: Person | null;
   lastSeen: number;
   // rate limiting: messages counted in the current one-second window
@@ -99,8 +103,8 @@ export class Room {
     }
   }
 
-  join(ws: WebSocket, access: Access = "edit"): void {
-    const conn: Conn = { ws, access, person: null, lastSeen: Date.now(), window: 0, count: 0 };
+  join(ws: WebSocket, access: Access = "edit", user?: db.User): void {
+    const conn: Conn = { ws, access, user, person: null, lastSeen: Date.now(), window: 0, count: 0 };
     this.conns.add(conn);
     ws.on("message", (data, isBinary) => {
       if (isBinary) return this.close(conn, 1003, "text only");
@@ -135,7 +139,10 @@ export class Room {
       if (typeof msg.token !== "string" || msg.token.length < 16 || msg.token.length > 128) {
         return this.close(conn, 1008, "a hello needs a token");
       }
-      conn.person = personFor(msg.token, msg.name);
+      // an account is the same person on every device, under its own name;
+      // a guest is whoever its browser's token says
+      conn.person = conn.user ? personFor(`account:${conn.user.id}`, conn.user.name) : personFor(msg.token, msg.name);
+      if (conn.user && this.design.id !== EXAMPLE_ID) db.markOpened(conn.user.id, this.design.id, conn.access);
       const authorIds = new Set([...this.features.values()].map((f) => f.by));
       const view = db.viewOf(this.design.id);
       this.send(conn, {
@@ -285,6 +292,7 @@ export class Room {
         const name = cleanName(msg.name);
         if (!name) return;
         db.putPerson(me.id, name);
+        if (conn.user) db.renameUser(conn.user.id, name);
         // Every open connection of this person, in any room, takes the new name.
         for (const room of rooms.values()) {
           let touched = false;

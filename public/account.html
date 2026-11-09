@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in · Bench</title>
+    <meta name="theme-color" content="#0c66e4" />
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/home.css" />
+    <script type="module" src="/build/account.js"></script>
+  </head>
+  <body class="account">
+    <header class="nav">
+      <div class="wrap nav-row">
+        <a class="brand" href="/" aria-label="Bench home">
+          <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0c66e4"/><path d="M7 24 L25 8 M7 8 h6 M7 8 v6 M25 24 h-6 M25 24 v-6" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+          <span>Bench</span>
+        </a>
+      </div>
+    </header>
+
+    <main class="wrap acct">
+      <section class="acct-card" aria-labelledby="acct-h">
+        <h1 id="acct-h"><span class="for-signin">Sign in to Bench</span><span class="for-signup">Create your Bench account</span></h1>
+        <p class="acct-lede">
+          <span class="for-signin">Your projects are waiting on <a href="/projects">your projects page</a>.</span>
+          <span class="for-signup">An account keeps every design you make or open, on any device. Anyone you share a link with can still join without one.</span>
+        </p>
+        <form id="acct-form" class="acct-form" novalidate>
+          <label class="for-signup" for="acct-name">Your name <small>shown on your cursor</small></label>
+          <input class="for-signup" id="acct-name" name="name" maxlength="32" autocomplete="nickname" />
+          <label for="acct-email">Email</label>
+          <input id="acct-email" name="email" type="email" required maxlength="254" autocomplete="email" />
+          <label for="acct-password">Password <small class="for-signup">at least 8 characters</small></label>
+          <input id="acct-password" name="password" type="password" required minlength="8" maxlength="200" autocomplete="current-password" />
+          <p id="acct-error" class="error" role="alert"></p>
+          <button type="submit" class="btn btn-primary btn-lg"><span class="for-signin">Sign in</span><span class="for-signup">Create account</span></button>
+        </form>
+        <p class="acct-switch">
+          <span class="for-signin">New to Bench? <a id="to-signup" href="/signup">Create an account</a></span>
+          <span class="for-signup">Already have one? <a id="to-signin" href="/signin">Sign in</a></span>
+        </p>
+        <p class="acct-note">There is no password reset: Bench sends no email. Keep your password somewhere safe.</p>
+      </section>
+    </main>
+  </body>
+</html>
