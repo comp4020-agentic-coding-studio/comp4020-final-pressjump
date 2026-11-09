@@ -1,5 +1,8 @@
 # ADR 0004 A guest the browser remembers instead of an account
 
+**Superseded by [ADR 0005](0005-accounts.md):** Bench now has accounts for
+starting designs and keeping projects; joining by a link still needs none.
+
 I wrote this decision record on how Bench, my multiplayer CAD app, remembers
 people without accounts just before the final submission. I put the rule in
 `CLAUDE.md` under what not to build, and `spec/access.test.ts` checks the one

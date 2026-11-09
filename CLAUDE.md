@@ -86,13 +86,37 @@ over unchanged; everything below that names 3D is new with that rebuild.
 
 ## What not to build
 
-No accounts, chat, comments or version branches. The guest profile is not an
-account and must not become one: your name is a cookie (`bench_guest`, with a
-copy in localStorage) and "My projects" is a list in localStorage, both kept
-by the browser alone. The server reads the cookie only to greet you on the
-home page and stores nothing of either; clearing the browser forgets you, and
-the page says so. Thumbnails come from `/api/views/<view>`: a design's
-features by its view link, never its edit id (`spec/access` holds both).
+No chat, comments or version branches.
+
+Accounts exist for one job: starting designs and keeping each person's
+projects (`docs/adr/0005-accounts.md`, superseding 0004). They must not grow
+past it.
+- Starting a design takes an account. Joining one never does: the edit link
+  lets a guest edit and the view link lets a guest watch, exactly as before.
+  An account is never a third kind of access; the link decides what you may
+  do, signed in or not.
+- An account is an email, a name and a salted scrypt hash of the password
+  (`server/auth.ts`, `node:crypto`). A password is never stored, logged or
+  sent back. There is no password reset, because Bench sends no email; the
+  sign-up page says so.
+- A session is a random token in an HttpOnly, SameSite=Lax cookie
+  (`bench_session`); the database keeps only its SHA-256. Signing out deletes
+  it on the server. A request that changes anything is refused if its Origin
+  is another site, and a socket opened from another site is a guest.
+- `/projects` is a page of its own, listing the designs an account made and
+  the ones it opened, each with the link it was given (an edit link only if it
+  held one; an edit link once held is kept). Nobody sees another account's
+  list, the example is never in one, and removing a project never touches the
+  design.
+- A guest's name is still a cookie (`bench_guest`) kept by the browser; the
+  server never treats it as a sign-in. The list of projects a browser kept
+  before accounts is offered once on `/projects` to add, by its links, and
+  then forgotten.
+- Sign-in failures are limited per address and email, sign-ups per address;
+  a limit hit is a refusal in words. `spec/accounts` holds all of this.
+
+Thumbnails come from `/api/views/<view>`: a design's features by its view
+link, never its edit id (`spec/access` holds it).
 
 No edge fillets, constraint solver, assemblies or joints: each would take far
 longer than this project has to do honestly, and a half-working one breaks
