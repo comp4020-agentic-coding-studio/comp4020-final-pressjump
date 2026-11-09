@@ -2144,3 +2144,9 @@ kbd {
     max-width: none;
   }
 }
+
+/* the README's logo has no frame, and its table scrolls inside itself so a
+   phone-width page never does */
+.prose img[src$="logo.svg"] { border: 0; }
+.prose table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.prose th, .prose td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
