@@ -1,6 +1,7 @@
 # CLAUDE.md: the harness for Bench
 
-Bench is 3D CAD for a few people on one part at once. `README.md` is the
+Bench is a shared 3D prototyping space where a few people put one part
+together at once, for fun, not a full CAD tool. `README.md` is the
 argument for what good means here. This file is the rules that argument turns
 into. `spec/` is the part of it a machine checks. When the three disagree, the
 README wins and the other two get fixed.
@@ -118,9 +119,10 @@ past it.
 Thumbnails come from `/api/views/<view>`: a design's features by its view
 link, never its edit id (`spec/access` holds it).
 
-No edge fillets, constraint solver, assemblies or joints: each would take far
-longer than this project has to do honestly, and a half-working one breaks
-promise 1. If a change seems to need one, stop and say so
+No edge fillets, constraint solver, assemblies, joints or threads: Bench is
+a playground for putting one printable part together, not a CAD tool. These
+serve experienced CAD users and make playing harder; the time goes to
+building together instead. If a change seems to need one, stop and say so
 instead of building it.
 
 A chamfer is therefore a typed number on a box (every edge) or a cylinder
