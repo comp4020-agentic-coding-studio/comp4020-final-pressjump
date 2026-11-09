@@ -151,7 +151,8 @@ note, never fakes: threads, involute gear teeth.
   answered with a refusal, not a crash.
 - **No importing, and the server takes no files.** Bench opens no model
   files (`docs/adr/0006-no-import.md`): a model only one person could see
-  does not belong in a tool where everyone sees the same part. The server has
+  does not belong in a tool where everyone sees the same part, and a reader
+  for other programs' files would have to run code built from untrusted input. The server has
   no route that takes a file, and a body over the limit is answered 413 and
   the connection closed. Never add importing back by storing or relaying
   models: one large upload would sink a 256 MB machine. Every script runs

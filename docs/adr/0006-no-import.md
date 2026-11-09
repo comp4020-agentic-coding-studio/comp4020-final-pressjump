@@ -7,7 +7,10 @@ stayed in the browser that opened it, so nobody else in the design saw it and
 the STL export left it out. Reading STEP needed a large WebAssembly reader
 (occt-import-js) and the one exception to the strict script policy. For a tool
 built around everyone seeing the same part, a model only one person can see
-did not fit.
+did not fit. Bench is a prototyping space, not a CAD tool that must read other
+programs' files. The reader was also a security risk: it parsed untrusted files
+with a large third-party library that had to be allowed to run code it
+generated, so a crafted file could have run an attacker's code in the browser.
 
 ## Decision
 
