@@ -39,6 +39,8 @@ it("loads nothing from anywhere but itself", async () => {
     expect(res.status, path).toBe(200);
     expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
     const html = await res.text();
-    expect(html).not.toMatch(/(src|href)="(https?:)?\/\//);
+    // a script, image or stylesheet from elsewhere; a link a reader may follow is not a load
+    expect(html).not.toMatch(/src="(https?:)?\/\//);
+    expect(html).not.toMatch(/<link[^>]+href="(https?:)?\/\//);
   }
 });
