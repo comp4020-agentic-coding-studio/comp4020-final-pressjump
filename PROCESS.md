@@ -133,4 +133,4 @@ design and UI work, which matters for beginners.
 
 ## Where it stands
 
-All 110 checks in `spec/` pass against a running server.
+All 118 checks in `spec/` pass against a running server.
