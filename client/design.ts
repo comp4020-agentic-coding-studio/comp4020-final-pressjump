@@ -32,6 +32,7 @@ import { Viewport, type Display } from "./viewport.ts";
 import { PRESSURE_KEY, SPEED_KEY, Wind, type WindDir } from "./wind.ts";
 import { EXAMPLE_ID } from "../shared/example.ts";
 import { guestName, setGuestName } from "./guest.ts";
+import { Glide } from "./glide.ts";
 
 const designId = location.pathname.split("/")[2] ?? "";
 // /d/<id> came in to edit, /v/<view> to watch; the server says which for sure
@@ -463,17 +464,30 @@ function receive(msg: ServerMessage): void {
     }
     case "cursors": {
       // only news arrives: merge it into what we know of each person
+      let drafts = msg.gone.length > 0;
+      const now = performance.now();
       for (const c of msg.cursors) {
         if (c.id === me?.id) continue;
         const known = remote.get(c.id) ?? { id: c.id };
-        if ("at" in c) known.at = c.at;
+        // the camera first: a pointer is played back from the eye it was seen from
         if (c.cam) known.cam = c.cam;
-        if ("draft" in c) known.draft = c.draft ? c.draft.map((f) => unpack(f)) : null;
+        if ("at" in c) {
+          known.at = c.at;
+          const glide = glides.get(c.id) ?? glides.set(c.id, new Glide()).get(c.id)!;
+          if (c.at) glide.push(c.at, known.cam?.p, now);
+          else glide.clear();
+        }
+        if ("draft" in c) {
+          known.draft = c.draft ? c.draft.map((f) => unpack(f)) : null;
+          drafts = true;
+        }
         remote.set(c.id, known);
         if (c.id === following && c.cam) vp.flyTo(c.cam, 120);
       }
       for (const id of msg.gone) remote.delete(id);
-      drawRemote();
+      // a pointer moving needs only the pointers drawn again, not the model
+      if (drafts) drawRemote();
+      else animatePointers();
       return;
     }
     case "design": {
@@ -1376,7 +1390,7 @@ function drawLabels(): void {
     el.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
     out.push(el);
   };
-  drawPointers();
+  if (drawPointers()) animatePointers();
   const tagged = new Set<string>();
   for (const s of evaluated.solids) {
     const holder = heldByOther(s.id);
@@ -1405,13 +1419,16 @@ vp.onFrame = () => {
 };
 
 // Other people's pointers: an arrow in their colour, with their name and,
-// while they drag or place something, what it is. Positions arrive at most
-// every 50 ms, so each pointer glides to the latest one rather than jumping.
+// while they drag or place something, what it is. Positions arrive about ten
+// times a second; client/glide.ts plays them back as a steady path. Pointers
+// are HTML over the view, so moving one never draws the model again: they
+// have their own frame loop, running only while one is on its way somewhere.
 const pointerLayer = document.createElement("div");
 pointerLayer.className = "pointers";
 pointerLayer.setAttribute("aria-hidden", "true");
 labels.after(pointerLayer);
-const pointers = new Map<string, { el: HTMLElement; tag: HTMLElement; arrow: SVGPathElement; shown: THREE.Vector3 | null }>();
+const pointers = new Map<string, { el: HTMLElement; tag: HTMLElement; arrow: SVGPathElement }>();
+const glides = new Map<string, Glide>();
 
 function pointerFor(pid: string) {
   let p = pointers.get(pid);
@@ -1421,20 +1438,22 @@ function pointerFor(pid: string) {
     el.innerHTML =
       '<svg viewBox="0 0 16 20"><path d="M1 1 L1 16 L5 12.5 L8 19 L10.6 17.8 L7.7 11.5 L13 11.5 Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><b></b>';
     pointerLayer.append(el);
-    p = { el, tag: el.querySelector("b")!, arrow: el.querySelector("path")!, shown: null };
+    p = { el, tag: el.querySelector("b")!, arrow: el.querySelector("path")! };
     pointers.set(pid, p);
   }
   return p;
 }
 
-function drawPointers(): void {
+function drawPointers(): boolean {
   let moving = false;
+  const now = performance.now();
   for (const [pid, p] of pointers) {
     if (!remote.has(pid)) {
       p.el.remove();
       pointers.delete(pid);
     }
   }
+  for (const pid of glides.keys()) if (!remote.has(pid)) glides.delete(pid);
   for (const [pid, c] of remote) {
     const p = pointerFor(pid);
     const colour = colourOf(pid);
@@ -1447,14 +1466,10 @@ function drawPointers(): void {
       p.el.classList.add("away");
       continue;
     }
-    const target = new THREE.Vector3(...c.at);
-    if (!p.shown) p.shown = target.clone();
-    else {
-      p.shown.lerp(target, 0.35);
-      if (p.shown.distanceToSquared(target) > 0.0004) moving = true;
-      else p.shown.copy(target);
-    }
-    const at = vp.project(p.shown);
+    const glide = glides.get(pid);
+    const shown = glide?.at(now) ?? c.at;
+    if (glide?.moving) moving = true;
+    const at = vp.project(pointerAt.set(...shown));
     if (!at) {
       p.el.classList.add("away");
       continue;
@@ -1462,7 +1477,17 @@ function drawPointers(): void {
     p.el.classList.remove("away");
     p.el.style.transform = `translate3d(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px, 0)`;
   }
-  if (moving) vp.schedule();
+  return moving;
+}
+const pointerAt = new THREE.Vector3();
+
+let pointerFrame = 0;
+function animatePointers(): void {
+  if (pointerFrame) return;
+  pointerFrame = requestAnimationFrame(() => {
+    pointerFrame = 0;
+    if (drawPointers()) animatePointers();
+  });
 }
 
 function drawRemote(): void {
