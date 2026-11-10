@@ -6,9 +6,9 @@ argument for what good means here. This file is the rules that argument turns
 into. `spec/` is the part of it a machine checks. When the three disagree, the
 README wins and the other two get fixed.
 
-Bench began as a 2D drafting table and was rebuilt as 3D CAD when its owner
-judged the 2D version too thin to be worth using. The four promises carried
-over unchanged; everything below that names 3D is new with that rebuild.
+Bench began as a 2D shared drawing that proved the multiplayer server, and
+3D was built on top of that server. The four promises carried over unchanged;
+everything below that names 3D is new with that step.
 
 ## The four promises, and what each one forbids
 
