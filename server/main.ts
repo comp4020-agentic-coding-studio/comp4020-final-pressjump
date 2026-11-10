@@ -81,15 +81,34 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   send(res, status, "application/json; charset=utf-8", JSON.stringify(body));
 }
 
-function file(res: ServerResponse, base: string, rel: string): boolean {
+// A file from disk. It carries a tag naming its size and time, so a browser
+// that already has it is answered 304 with no body, and a built file with a
+// brotli copy beside it (made by scripts/compress.ts) is sent as that copy to
+// any browser that takes brotli.
+function file(req: IncomingMessage, res: ServerResponse, base: string, rel: string): boolean {
   const path = normalize(join(base, rel));
   if (!path.startsWith(base + sep)) return false;
+  let stat;
   try {
-    if (!statSync(path).isFile()) return false;
+    stat = statSync(path);
+    if (!stat.isFile()) return false;
   } catch {
     return false;
   }
-  send(res, 200, TYPES[extname(path)] ?? "application/octet-stream", readFileSync(path));
+  let br = false;
+  if (/\bbr\b/.test(String(req.headers["accept-encoding"] ?? ""))) {
+    try {
+      br = statSync(`${path}.br`).mtimeMs >= stat.mtimeMs;
+    } catch {}
+  }
+  const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}${br ? "-br" : ""}"`;
+  const extra = { ETag: tag, Vary: "Accept-Encoding", ...(br ? { "Content-Encoding": "br" } : {}) };
+  if (String(req.headers["if-none-match"] ?? "").split(",").some((t) => t.trim().replace(/^W\//, "") === tag)) {
+    res.writeHead(304, { "Cache-Control": "no-cache", ...HEADERS, ...extra });
+    res.end();
+    return true;
+  }
+  send(res, 200, TYPES[extname(path)] ?? "application/octet-stream", readFileSync(br ? `${path}.br` : path), extra);
   return true;
 }
 
@@ -270,7 +289,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/readme") return send(res, 301, "text/plain", "", { Location: "/readme/" });
     if (req.method === "GET" && path === "/readme/") return send(res, 200, TYPES[".html"], readmePage());
     if (req.method === "GET" && path.startsWith("/readme/docs/")) {
-      return file(res, DOCS, decodeURIComponent(path.slice("/readme/docs/".length))) || notFound(res);
+      return file(req, res, DOCS, decodeURIComponent(path.slice("/readme/docs/".length))) || notFound(res);
     }
 
     // The public list gives out view links only, so it cannot be used to get
@@ -327,13 +346,13 @@ const server = createServer(async (req, res) => {
     if (page && req.method === "GET") {
       const design = page[1] === "d" ? db.getDesign(page[2]) : db.getDesignByView(page[2]);
       if (!design) return notFound(res);
-      if (!page[3]) return file(res, PUBLIC, "design.html") || notFound(res);
+      if (!page[3]) return file(req, res, PUBLIC, "design.html") || notFound(res);
       return send(res, 200, "model/stl", toStl(design.name, db.loadFeatures(design.id)), {
         "Content-Disposition": `attachment; filename="${slug(design.name)}.stl"`,
       });
     }
 
-    if (req.method === "GET" && !path.endsWith(".html") && file(res, PUBLIC, decodeURIComponent(path.slice(1)))) {
+    if (req.method === "GET" && !path.endsWith(".html") && file(req, res, PUBLIC, decodeURIComponent(path.slice(1)))) {
       return;
     }
     notFound(res);

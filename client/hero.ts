@@ -1,8 +1,10 @@
 // The home page hero: a CAD workspace with a real part in it, and pretend
 // people working on it.
 //
-// The part is built from a timeline by the same shared/evaluate.ts the editor
-// and the STL export use, so what the page shows is a part Bench can make.
+// The part is built from a timeline (shared/bracket.ts) by the same
+// shared/evaluate.ts the editor and the STL export use, so what the page shows
+// is a part Bench can make. That takes seconds, so `pnpm build` does it once
+// per height and the page loads the mesh: the part is up as soon as the page.
 // When Ana types a new height, the part is rebuilt to that height and the
 // dimension on the model says so; nothing shows a number the model lacks.
 //
@@ -17,8 +19,7 @@
 // material, and at a lower resolution if frames start running long.
 
 import * as THREE from "three";
-import { creases, evaluate } from "../shared/evaluate.ts";
-import type { Stored } from "../shared/model.ts";
+import { bracketMeshUrl, unpackBracket } from "../shared/bracket.ts";
 
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dark = matchMedia("(prefers-color-scheme: dark)").matches;
@@ -50,45 +51,28 @@ measure();
 
 // ---------------------------------------------------------------- the part
 
-let n = 0;
-const meta = (id: string) => ({ id, v: 1, by: "demo", seq: ++n });
-const box = (id: string, w: number, h: number, d: number, pos: [number, number, number], fillet = 0): Stored => ({
-  ...meta(id), kind: "box", name: id, w, h, d, fillet, chamfer: 0, pos, rot: [0, 0, 0], colour: "#c9ced6",
-});
-const cyl = (id: string, r: number, h: number, pos: [number, number, number], rot: [number, number, number] = [0, 0, 0]): Stored => ({
-  ...meta(id), kind: "cylinder", name: id, r, h, chamfer: 0, pos, rot, colour: "#c9ced6",
-});
-const combine = (id: string, op: "join" | "cut", target: string, tools: string[]): Stored => ({
-  ...meta(id), kind: "combine", name: id, op, target, tools,
-});
-
-// An angle bracket: 140 mm wide base plate, an upright of the given height,
-// a boss, two mounting holes and a bore through the upright.
-function bracket(uprightH: number): Stored[] {
-  n = 0;
-  return [
-    box("base", 140, 10, 90, [0, 0, 0], 4),
-    box("upright", 140, uprightH, 10, [0, 10, -40]),
-    combine("join1", "join", "base", ["upright"]),
-    cyl("boss", 18, 10, [0, 10, 10]),
-    combine("join2", "join", "base", ["boss"]),
-    cyl("hole1", 6, 30, [-48, -5, 20]),
-    cyl("hole2", 6, 30, [48, -5, 20]),
-    cyl("hole3", 9, 30, [0, -5, 10]),
-    cyl("bore", 16, 30, [0, 45, -60], [90, 0, 0]),
-    combine("cut1", "cut", "base", ["hole1", "hole2", "hole3", "bore"]),
-  ];
-}
-
-const built = new Map<number, { solid: THREE.BufferGeometry; edges: THREE.BufferGeometry }>();
-function geometryFor(h: number) {
-  let g = built.get(h);
-  if (!g) {
-    const solid = evaluate(bracket(h)).solids[0].geometry;
-    g = { solid, edges: creases(solid) };
-    built.set(h, g);
+type PartMesh = { solid: THREE.BufferGeometry; edges: THREE.BufferGeometry };
+const meshes = new Map<number, Promise<PartMesh>>();
+function meshFor(h: number): Promise<PartMesh> {
+  let m = meshes.get(h);
+  if (!m) {
+    m = fetch(bracketMeshUrl(h))
+      .then((res) => {
+        if (!res.ok) throw new Error(`the bracket at ${h} mm did not load: ${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then((buf) => {
+        const mesh = unpackBracket(buf);
+        const solid = new THREE.BufferGeometry();
+        solid.setAttribute("position", new THREE.BufferAttribute(mesh.position, 3));
+        solid.setAttribute("normal", new THREE.BufferAttribute(mesh.normal, 3));
+        solid.setIndex(new THREE.BufferAttribute(mesh.index, 1));
+        const edges = new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(mesh.edges, 3));
+        return { solid, edges };
+      });
+    meshes.set(h, m);
   }
-  return g;
+  return m;
 }
 
 // ---------------------------------------------------------------- the scene
@@ -149,10 +133,22 @@ function makeScene(): Scene3D | null {
   const solidMat = () =>
     new THREE.MeshLambertMaterial({ color: PART, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 
-  const first = geometryFor(uprightH);
-  const part = new THREE.Mesh(first.solid, solidMat());
-  const partEdges = new THREE.LineSegments(first.edges, new THREE.LineBasicMaterial({ color: EDGE }));
+  // empty until its mesh arrives, which is moments after the page
+  const part = new THREE.Mesh(new THREE.BufferGeometry(), solidMat());
+  const partEdges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: EDGE }));
   turntable.add(part, partEdges);
+  function show(h: number): void {
+    meshFor(h).then(
+      (g) => {
+        if (h !== uprightH) return; // retyped again while it loaded
+        part.geometry = g.solid;
+        partEdges.geometry = g.edges;
+        dirty = true;
+      },
+      (e) => console.warn(e),
+    );
+  }
+  show(uprightH);
 
   // a workshop floor of 50 mm squares, running out into the fog
   const floor = new THREE.GridHelper(2000, 40, dark ? 0x3a4352 : 0xd3d9e2, dark ? 0x3a4352 : 0xd3d9e2);
@@ -279,15 +275,13 @@ function makeScene(): Scene3D | null {
       const p = project(dimAt.set(88, 10 + uprightH / 2, -35));
       dimTag.style.transform = `translate(${p.x.toFixed(1)}px, ${(p.y - 10).toFixed(1)}px)`;
     },
-    // build the other height ahead of time, so Ana's edit never stalls a frame
+    // load the other height ahead of time, so Ana's edit shows at once
     warm() {
-      geometryFor(95);
+      void meshFor(95);
     },
     setHeight(h) {
       uprightH = h;
-      const g = geometryFor(h);
-      part.geometry = g.solid;
-      partEdges.geometry = g.edges;
+      show(h);
       drawDim(h);
       dimTag.textContent = `${h}.000`;
     },
@@ -634,7 +628,7 @@ function run(s: Scene3D | null): void {
 
 const scene = makeScene();
 run(scene);
-// the second height's boolean, built while nobody is looking at it yet
+// the second height's mesh, loaded once the page has settled
 const idle = (fn: () => void) => ("requestIdleCallback" in window ? requestIdleCallback(fn, { timeout: 1500 }) : setTimeout(fn, 800));
 if (scene) idle(() => scene.warm());
 new ResizeObserver(measure).observe(hero);
